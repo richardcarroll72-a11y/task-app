@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#6366f1" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="My Tasks" />
+  <title>My Tasks</title>
+  <link rel="manifest" href="/manifest.json" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --primary: #6366f1;
+      --primary-light: #eef2ff;
+      --bg: #f8f9fc;
+      --card: #ffffff;
+      --text: #1e1e2e;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --red: #ef4444;
+      --red-light: #fef2f2;
+      --yellow: #f59e0b;
+      --yellow-light: #fffbeb;
+      --green: #10b981;
+      --green-light: #ecfdf5;
+      --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+      --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.08), 0 2px 4px -1px rgba(0,0,0,0.04);
+      --radius: 12px;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding-bottom: calc(80px + var(--safe-bottom));
+    }
+
+    /* ── Header ── */
+    .header {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: calc(var(--safe-top) + 16px) 20px 16px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      box-shadow: var(--shadow);
+    }
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .header h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .header-date {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .btn-refresh {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 1.2rem;
+      padding: 6px;
+      border-radius: 8px;
+      color: var(--muted);
+      transition: background 0.15s;
+    }
+    .btn-refresh:hover { background: var(--bg); }
+    .btn-refresh.spinning { animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Stats bar ── */
+    .stats-bar {
+      display: flex;
+      gap: 8px;
+    }
+    .stat-chip {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .stat-chip.today { background: var(--primary-light); border-color: #c7d2fe; color: var(--primary); }
+    .stat-chip.overdue { background: var(--red-light); border-color: #fecaca; color: var(--red); }
+    .stat-num { font-size: 1rem; font-weight: 700; }
+
+    /* ── Main content ── */
+    .main { padding: 16px 16px 0; max-width: 640px; margin: 0 auto; }
+
+    /* ── Section label ── */
+    .section-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 20px 0 8px 4px;
+    }
+
+    /* ── Task card ── */
+    .task-card {
+      background: var(--card);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      transition: box-shadow 0.15s, opacity 0.3s, transform 0.3s;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+    }
+    .task-card:hover { box-shadow: var(--shadow-md); }
+    .task-card:active { transform: scale(0.99); }
+    .task-card.completing {
+      opacity: 0;
+      transform: translateX(60px);
+    }
+
+    .check-btn {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      background: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 1px;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .check-btn:hover { border-color: var(--green); background: var(--green-light); }
+    .check-btn.loading { border-color: var(--primary); animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
+    .task-body { flex: 1; min-width: 0; }
+    .task-name {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.4;
+      word-break: break-word;
+    }
+    .task-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 7px;
+      align-items: center;
+    }
+
+    /* Priority badge */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 0.72rem;
+      font-weight: 700;
+    }
+    .badge-high { background: var(--red-light); color: var(--red); }
+    .badge-medium { background: var(--yellow-light); color: #92400e; }
+    .badge-low { background: var(--green-light); color: #065f46; }
+    .badge-none { background: var(--bg); color: var(--muted); }
+
+    /* Project tag */
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 7px;
+      border-radius: 6px;
+      font-size: 0.7rem;
+      font-weight: 500;
+      background: #f3f4f6;
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+
+    /* Due date */
+    .due-date {
+      font-size: 0.72rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+    .due-date.overdue { color: var(--red); font-weight: 600; }
+    .due-date.today { color: var(--primary); font-weight: 600; }
+
+    /* ── Empty state ── */
+    .empty-state {
+      text-align: center;
+      padding: 48px 24px;
+      color: var(--muted);
+    }
+    .empty-state .emoji { font-size: 3rem; margin-bottom: 12px; }
+    .empty-state p { font-size: 0.9rem; }
+
+    /* ── Error state ── */
+    .error-bar {
+      background: var(--red-light);
+      border: 1px solid #fecaca;
+      border-radius: 10px;
+      padding: 12px 16px;
+      color: var(--red);
+      font-size: 0.85rem;
+      margin-bottom: 12px;
+      display: none;
+    }
+    .error-bar.visible { display: block; }
+
+    /* ── Offline banner ── */
+    .offline-bar {
+      background: #fef3c7;
+      border-bottom: 1px solid #fde68a;
+      padding: 8px 20px;
+      font-size: 0.78rem;
+      color: #92400e;
+      text-align: center;
+      display: none;
+    }
+    .offline-bar.visible { display: block; }
+
+    /* ── FAB (add button) ── */
+    .fab {
+      position: fixed;
+      bottom: calc(24px + var(--safe-bottom));
+      right: 20px;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: white;
+      border: none;
+      font-size: 1.6rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 14px rgba(99,102,241,0.5);
+      z-index: 40;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .fab:hover { transform: scale(1.08); box-shadow: 0 6px 20px rgba(99,102,241,0.6); }
+    .fab:active { transform: scale(0.96); }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 100;
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+
+    .modal {
+      background: var(--card);
+      border-radius: var(--radius) var(--radius) 0 0;
+      width: 100%;
+      max-width: 640px;
+      padding: 24px 20px calc(20px + var(--safe-bottom));
+      animation: slideUp 0.25s ease-out;
+    }
+    @keyframes slideUp {
+      from { transform: translateY(100%); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .modal h2 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 20px;
+    }
+
+    .form-group { margin-bottom: 16px; }
+    .form-group label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-family: inherit;
+      background: var(--card);
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.15s;
+      -webkit-appearance: none;
+    }
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      border-color: var(--primary);
+    }
+    .form-group textarea { resize: vertical; min-height: 72px; }
+
+    .multi-check {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .multi-check label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border: 1.5px solid var(--border);
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--text);
+      text-transform: none;
+      letter-spacing: 0;
+      margin-bottom: 0;
+    }
+    .multi-check input[type=checkbox] { accent-color: var(--primary); }
+    .multi-check label:has(input:checked) {
+      border-color: var(--primary);
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    .btn {
+      flex: 1;
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn:active { opacity: 0.8; }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-secondary { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Skeleton loading ── */
+    .skeleton {
+      background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 8px;
+    }
+    @keyframes shimmer { to { background-position: -200% 0; } }
+    .skeleton-card {
+      background: var(--card);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      display: flex;
+      gap: 12px;
+    }
+    .sk-circle { width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0; }
+    .sk-lines { flex: 1; }
+    .sk-line { height: 12px; margin-bottom: 8px; border-radius: 6px; }
+    .sk-line-short { width: 60%; }
+
+    /* Notion link */
+    .notion-link {
+      display: block;
+      text-align: center;
+      color: var(--primary);
+      font-size: 0.8rem;
+      padding: 16px;
+      text-decoration: none;
+      opacity: 0.7;
+    }
+    .notion-link:hover { opacity: 1; }
+  </style>
+</head>
+<body>
+
+<div class="offline-bar" id="offlineBanner">
+  📡 You're offline — showing cached tasks
+</div>
+
+<header class="header">
+  <div class="header-top">
+    <div>
+      <h1>📋 My Tasks</h1>
+      <div class="header-date" id="headerDate"></div>
+    </div>
+    <button class="btn-refresh" id="refreshBtn" title="Refresh" aria-label="Refresh tasks">↻</button>
+  </div>
+  <div class="stats-bar">
+    <div class="stat-chip today">
+      <span>📅 Today</span>
+      <span class="stat-num" id="statToday">—</span>
+    </div>
+    <div class="stat-chip overdue">
+      <span>🔥 Overdue</span>
+      <span class="stat-num" id="statOverdue">—</span>
+    </div>
+  </div>
+</header>
+
+<main class="main">
+  <div class="error-bar" id="errorBar"></div>
+
+  <div id="loadingState">
+    <!-- Skeleton cards -->
+    <div class="section-label">Loading…</div>
+    ${[1,2,3].map(() => `
+    <div class="skeleton-card">
+      <div class="skeleton sk-circle"></div>
+      <div class="sk-lines">
+        <div class="skeleton sk-line" style="width:80%"></div>
+        <div class="skeleton sk-line sk-line-short"></div>
+      </div>
+    </div>`).join('')}
+  </div>
+
+  <div id="taskList" style="display:none"></div>
+</main>
+
+<button class="fab" id="addBtn" title="Add task" aria-label="Add new task">+</button>
+
+<!-- Add Task Modal -->
+<div class="modal-overlay" id="modalOverlay" role="dialog" aria-modal="true" aria-label="Add new task">
+  <div class="modal">
+    <h2>✏️ New Task</h2>
+    <form id="addForm">
+      <div class="form-group">
+        <label for="taskName">Task name *</label>
+        <input type="text" id="taskName" placeholder="What needs to be done?" required autocomplete="off" />
+      </div>
+      <div class="form-group">
+        <label for="taskDue">Due date</label>
+        <input type="date" id="taskDue" />
+      </div>
+      <div class="form-group">
+        <label for="taskPriority">Priority</label>
+        <select id="taskPriority">
+          <option value="">— No priority —</option>
+          <option value="High 🔥">🔴 High 🔥</option>
+          <option value="Medium">🟡 Medium</option>
+          <option value="Low">🟢 Low</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Project / Category</label>
+        <div class="multi-check" id="projectCheck">
+          <label><input type="checkbox" value="Personal" /> 🏠 Personal</label>
+          <label><input type="checkbox" value="Work" /> 💼 Work</label>
+          <label><input type="checkbox" value="Health" /> 💪 Health</label>
+          <label><input type="checkbox" value="Finance" /> 💰 Finance</label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="taskNotes">Notes</label>
+        <textarea id="taskNotes" placeholder="Optional notes…"></textarea>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="submitBtn">Add Task</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+// ── Utilities ────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const today = new Date().toISOString().split('T')[0];
+
+function formatDate(dateStr) {
+  if (!dateStr) return null;
+  if (dateStr === today) return 'Today';
+  const d = new Date(dateStr + 'T00:00:00');
+  const now = new Date();
+  now.setHours(0,0,0,0);
+  const diff = Math.round((d - now) / 86400000);
+  if (diff === -1) return 'Yesterday';
+  if (diff < 0) return `${Math.abs(diff)}d overdue`;
+  if (diff === 1) return 'Tomorrow';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function priorityClass(p) {
+  if (!p) return 'badge-none';
+  if (p.startsWith('High')) return 'badge-high';
+  if (p.startsWith('Medium')) return 'badge-medium';
+  if (p.startsWith('Low')) return 'badge-low';
+  return 'badge-none';
+}
+
+function priorityIcon(p) {
+  if (!p) return '';
+  if (p.startsWith('High')) return '🔴';
+  if (p.startsWith('Medium')) return '🟡';
+  if (p.startsWith('Low')) return '🟢';
+  return '';
+}
+
+// ── Header date ──────────────────────────────────────────────────────────────
+$('headerDate').textContent = new Date().toLocaleDateString('en-US', {
+  weekday: 'long', month: 'long', day: 'numeric'
+});
+
+// Set default due date to today
+$('taskDue').value = today;
+
+// ── State ────────────────────────────────────────────────────────────────────
+let tasks = [];
+
+// ── Fetch tasks ──────────────────────────────────────────────────────────────
+async function loadTasks() {
+  const btn = $('refreshBtn');
+  btn.classList.add('spinning');
+  hideError();
+
+  try {
+    const res = await fetch('/api/tasks');
+    if (!res.ok) throw new Error(`Server error ${res.status}`);
+    const data = await res.json();
+
+    if (data.offline) {
+      $('offlineBanner').classList.add('visible');
+    } else {
+      $('offlineBanner').classList.remove('visible');
+    }
+
+    tasks = data.tasks || [];
+    $('statToday').textContent = data.stats?.today ?? tasks.length;
+    $('statOverdue').textContent = data.stats?.overdue ?? 0;
+    renderTasks();
+  } catch (err) {
+    showError('Could not load tasks. Check your connection or Vercel deployment.');
+    console.error(err);
+  } finally {
+    $('loadingState').style.display = 'none';
+    $('taskList').style.display = 'block';
+    btn.classList.remove('spinning');
+  }
+}
+
+// ── Render tasks ─────────────────────────────────────────────────────────────
+function renderTasks() {
+  const list = $('taskList');
+
+  if (tasks.length === 0) {
+    list.innerHTML = `
+      <div class="empty-state">
+        <div class="emoji">🎉</div>
+        <p>You're all caught up!<br>No tasks due today or overdue.</p>
+      </div>`;
+    return;
+  }
+
+  const todayTasks = tasks.filter(t => t.dueDate === today);
+  const overdueTasks = tasks.filter(t => t.dueDate && t.dueDate < today);
+
+  let html = '';
+
+  if (todayTasks.length > 0) {
+    html += `<div class="section-label">📅 Due Today (${todayTasks.length})</div>`;
+    html += todayTasks.map(taskCard).join('');
+  }
+
+  if (overdueTasks.length > 0) {
+    html += `<div class="section-label">🔥 Overdue (${overdueTasks.length})</div>`;
+    html += overdueTasks.map(taskCard).join('');
+  }
+
+  html += `<a class="notion-link" href="https://www.notion.so/64204e6b365f836c83798111f9c55f5a?v=33904e6b365f81d9884f000c75f1408d" target="_blank" rel="noopener">
+    Open in Notion ↗
+  </a>`;
+
+  list.innerHTML = html;
+
+  // Attach complete listeners
+  list.querySelectorAll('.check-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      markComplete(btn.dataset.id, btn);
+    });
+  });
+}
+
+function taskCard(task) {
+  const dateLabel = formatDate(task.dueDate);
+  const isOverdue = task.dueDate && task.dueDate < today;
+  const dateClass = isOverdue ? 'overdue' : (task.dueDate === today ? 'today' : '');
+
+  const projectTags = (task.project || [])
+    .map(p => `<span class="tag">${p}</span>`)
+    .join('');
+
+  const dueBadge = dateLabel
+    ? `<span class="due-date ${dateClass}">📅 ${dateLabel}</span>`
+    : '';
+
+  const priorityBadge = task.priority
+    ? `<span class="badge ${priorityClass(task.priority)}">${priorityIcon(task.priority)} ${task.priority}</span>`
+    : '';
+
+  return `
+    <div class="task-card" data-id="${task.id}">
+      <button class="check-btn" data-id="${task.id}" title="Mark complete" aria-label="Mark '${task.name}' complete"></button>
+      <div class="task-body">
+        <div class="task-name">${escHtml(task.name)}</div>
+        <div class="task-meta">
+          ${priorityBadge}
+          ${projectTags}
+          ${dueBadge}
+        </div>
+      </div>
+    </div>`;
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ── Mark complete ────────────────────────────────────────────────────────────
+async function markComplete(id, btn) {
+  if (btn.classList.contains('loading')) return;
+  btn.classList.add('loading');
+  btn.innerHTML = '●';
+
+  try {
+    const res = await fetch(`/api/tasks?id=${encodeURIComponent(id)}`, { method: 'PATCH' });
+    if (!res.ok) throw new Error(`Error ${res.status}`);
+
+    // Animate card out
+    const card = document.querySelector(`.task-card[data-id="${id}"]`);
+    if (card) {
+      card.classList.add('completing');
+      await delay(300);
+    }
+
+    // Remove from local state and re-render
+    tasks = tasks.filter(t => t.id !== id);
+    const todayCount = tasks.filter(t => t.dueDate === today).length;
+    const overdueCount = tasks.filter(t => t.dueDate && t.dueDate < today).length;
+    $('statToday').textContent = todayCount;
+    $('statOverdue').textContent = overdueCount;
+    renderTasks();
+  } catch (err) {
+    btn.classList.remove('loading');
+    btn.innerHTML = '';
+    showError('Could not mark task complete. Check your connection.');
+    console.error(err);
+  }
+}
+
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Add task modal ───────────────────────────────────────────────────────────
+$('addBtn').addEventListener('click', () => {
+  $('modalOverlay').classList.add('open');
+  $('taskName').focus();
+});
+
+function closeModal() {
+  $('modalOverlay').classList.remove('open');
+  $('addForm').reset();
+  $('taskDue').value = today;
+}
+
+$('cancelBtn').addEventListener('click', closeModal);
+$('modalOverlay').addEventListener('click', e => {
+  if (e.target === $('modalOverlay')) closeModal();
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+});
+
+$('addForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = $('submitBtn');
+  btn.disabled = true;
+  btn.textContent = 'Adding…';
+  hideError();
+
+  const name = $('taskName').value.trim();
+  const dueDate = $('taskDue').value || null;
+  const priority = $('taskPriority').value || null;
+  const project = [...document.querySelectorAll('#projectCheck input:checked')].map(el => el.value);
+  const notes = $('taskNotes').value.trim() || null;
+
+  try {
+    const res = await fetch('/api/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, dueDate, priority, project, notes }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Error ${res.status}`);
+    }
+    const newTask = await res.json();
+
+    closeModal();
+
+    // Only add to local view if the task is due today or overdue
+    if (newTask.dueDate && newTask.dueDate <= today) {
+      tasks = [newTask, ...tasks];
+      const todayCount = tasks.filter(t => t.dueDate === today).length;
+      const overdueCount = tasks.filter(t => t.dueDate && t.dueDate < today).length;
+      $('statToday').textContent = todayCount;
+      $('statOverdue').textContent = overdueCount;
+      renderTasks();
+    }
+  } catch (err) {
+    showError(err.message || 'Could not add task. Please try again.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Add Task';
+  }
+});
+
+// ── Refresh button ───────────────────────────────────────────────────────────
+$('refreshBtn').addEventListener('click', loadTasks);
+
+// ── Error helpers ────────────────────────────────────────────────────────────
+function showError(msg) {
+  const bar = $('errorBar');
+  bar.textContent = '⚠️ ' + msg;
+  bar.classList.add('visible');
+}
+function hideError() {
+  $('errorBar').classList.remove('visible');
+}
+
+// ── Offline detection ────────────────────────────────────────────────────────
+window.addEventListener('online', () => {
+  $('offlineBanner').classList.remove('visible');
+  loadTasks();
+});
+window.addEventListener('offline', () => {
+  $('offlineBanner').classList.add('visible');
+});
+
+// ── Service worker ───────────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(console.error);
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+loadTasks();
+</script>
+</body>
+</html>
