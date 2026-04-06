@@ -412,6 +412,24 @@
       opacity: 0.7;
     }
     .notion-link:hover { opacity: 1; }
+
+    /* Article / URL link chip */
+    .article-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      background: var(--primary-light);
+      color: var(--primary);
+      border: 1px solid #c7d2fe;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .article-link:hover { background: #c7d2fe; border-color: var(--primary); }
   </style>
 </head>
 <body>
@@ -676,6 +694,13 @@ function taskCard(task) {
     ? `<span class="badge ${priorityClass(task.priority)}">${priorityIcon(task.priority)} ${task.priority}</span>`
     : '';
 
+  // Extract the first URL from the Notes field so article tasks show a tap-able link
+  const urlMatch = task.notes && task.notes.match(/https?:\/\/[^\s\n]+/);
+  const articleUrl = urlMatch ? urlMatch[0] : null;
+  const linkBadge = articleUrl
+    ? `<a class="article-link" href="${escHtml(articleUrl)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">🔗 Open</a>`
+    : '';
+
   return `
     <div class="task-card" data-id="${task.id}">
       <button class="check-btn" data-id="${task.id}" title="Mark complete" aria-label="Mark '${task.name}' complete"></button>
@@ -685,6 +710,7 @@ function taskCard(task) {
           ${priorityBadge}
           ${projectTags}
           ${dueBadge}
+          ${linkBadge}
         </div>
       </div>
     </div>`;
