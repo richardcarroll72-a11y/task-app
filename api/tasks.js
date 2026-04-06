@@ -31,7 +31,9 @@ function mapPage(page) {
   const props = page.properties;
   const dueStart = props['Due Date']?.date?.start || null;
   const today = new Date().toISOString().split('T')[0];
-  const isOverdue = dueStart && dueStart < today;
+  // Use date-only part for comparison so datetime strings (e.g. "2026-04-06T09:00:00+00:00") compare correctly
+  const dueDateOnly = dueStart ? dueStart.split('T')[0] : null;
+  const isOverdue = dueDateOnly && dueDateOnly < today;
 
   return {
     id: page.id,
@@ -89,9 +91,9 @@ module.exports = async (req, res) => {
 
       const tasks = (data.results || []).map(mapPage);
 
-      // Separate today vs overdue for stats
-      const todayTasks = tasks.filter(t => t.dueDate === today);
-      const overdueTasks = tasks.filter(t => t.dueDate && t.dueDate < today);
+      // Separate today vs overdue for stats (use date-only part to handle datetime strings)
+      const todayTasks = tasks.filter(t => t.dueDate && t.dueDate.split('T')[0] === today);
+      const overdueTasks = tasks.filter(t => t.dueDate && t.dueDate.split('T')[0] < today);
 
       return res.status(200).json({
         tasks,
@@ -114,7 +116,12 @@ module.exports = async (req, res) => {
         'Status 1': { status: { name: 'Not started' } },
       };
 
-      if (dueDate) properties['Due Date'] = { date: { start: dueDate } };
+      if (dueDate) {
+        // If a time component is present, include timezone so Notion stores it correctly
+        const dateObj = { start: dueDate };
+        if (dueDate.includes('T')) dateObj.time_zone = 'America/Edmonton';
+        properties['Due Date'] = { date: dateObj };
+      }
       if (priority) properties['Priority'] = { select: { name: priority } };
       if (project?.length) properties['Project'] = { multi_select: project.map(p => ({ name: p })) };
       if (notes?.trim()) properties['Notes'] = { rich_text: [{ text: { content: notes.trim() } }] };

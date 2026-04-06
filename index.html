@@ -475,6 +475,10 @@
         <input type="date" id="taskDue" />
       </div>
       <div class="form-group">
+        <label for="taskDueTime">Due time <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">(optional)</span></label>
+        <input type="time" id="taskDueTime" />
+      </div>
+      <div class="form-group">
         <label for="taskPriority">Priority</label>
         <select id="taskPriority">
           <option value="">— No priority —</option>
@@ -509,17 +513,49 @@
 const $ = id => document.getElementById(id);
 const today = new Date().toISOString().split('T')[0];
 
+// ── Date helpers ─────────────────────────────────────────────────────────────
+function hasTime(dateStr) {
+  return Boolean(dateStr && dateStr.includes('T'));
+}
+
+function dateOnlyPart(dateStr) {
+  if (!dateStr) return null;
+  return dateStr.split('T')[0];
+}
+
+function parseNotionDate(dateStr) {
+  if (!dateStr) return null;
+  if (!hasTime(dateStr)) {
+    // Date-only: construct as local midnight to avoid UTC shift
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+  // Datetime string: parse normally (handles ISO with or without timezone offset)
+  return new Date(dateStr);
+}
+
 function formatDate(dateStr) {
   if (!dateStr) return null;
-  if (dateStr === today) return 'Today';
-  const d = new Date(dateStr + 'T00:00:00');
+  const dateOnly = dateOnlyPart(dateStr);
+  const d = parseNotionDate(dateStr);
+  if (!d || isNaN(d.getTime())) return null;
+
   const now = new Date();
-  now.setHours(0,0,0,0);
-  const diff = Math.round((d - now) / 86400000);
-  if (diff === -1) return 'Yesterday';
-  if (diff < 0) return `${Math.abs(diff)}d overdue`;
-  if (diff === 1) return 'Tomorrow';
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  now.setHours(0, 0, 0, 0);
+  const diff = Math.round((new Date(dateOnly + 'T00:00:00') - now) / 86400000);
+
+  const timeStr = hasTime(dateStr)
+    ? d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    : null;
+
+  let datePart;
+  if (diff === 0) datePart = 'Today';
+  else if (diff === -1) datePart = 'Yesterday';
+  else if (diff < 0) datePart = `${Math.abs(diff)}d overdue`;
+  else if (diff === 1) datePart = 'Tomorrow';
+  else datePart = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+  return timeStr ? `${datePart} at ${timeStr}` : datePart;
 }
 
 function priorityClass(p) {
@@ -593,8 +629,8 @@ function renderTasks() {
     return;
   }
 
-  const todayTasks = tasks.filter(t => t.dueDate === today);
-  const overdueTasks = tasks.filter(t => t.dueDate && t.dueDate < today);
+  const todayTasks = tasks.filter(t => dateOnlyPart(t.dueDate) === today);
+  const overdueTasks = tasks.filter(t => t.dueDate && dateOnlyPart(t.dueDate) < today);
 
   let html = '';
 
@@ -625,8 +661,8 @@ function renderTasks() {
 
 function taskCard(task) {
   const dateLabel = formatDate(task.dueDate);
-  const isOverdue = task.dueDate && task.dueDate < today;
-  const dateClass = isOverdue ? 'overdue' : (task.dueDate === today ? 'today' : '');
+  const isOverdue = task.dueDate && dateOnlyPart(task.dueDate) < today;
+  const dateClass = isOverdue ? 'overdue' : (dateOnlyPart(task.dueDate) === today ? 'today' : '');
 
   const projectTags = (task.project || [])
     .map(p => `<span class="tag">${p}</span>`)
@@ -681,8 +717,8 @@ async function markComplete(id, btn) {
 
     // Remove from local state and re-render
     tasks = tasks.filter(t => t.id !== id);
-    const todayCount = tasks.filter(t => t.dueDate === today).length;
-    const overdueCount = tasks.filter(t => t.dueDate && t.dueDate < today).length;
+    const todayCount = tasks.filter(t => dateOnlyPart(t.dueDate) === today).length;
+    const overdueCount = tasks.filter(t => t.dueDate && dateOnlyPart(t.dueDate) < today).length;
     $('statToday').textContent = todayCount;
     $('statOverdue').textContent = overdueCount;
     renderTasks();
@@ -706,6 +742,7 @@ function closeModal() {
   $('modalOverlay').classList.remove('open');
   $('addForm').reset();
   $('taskDue').value = today;
+  $('taskDueTime').value = '';
 }
 
 $('cancelBtn').addEventListener('click', closeModal);
@@ -725,7 +762,11 @@ $('addForm').addEventListener('submit', async e => {
   hideError();
 
   const name = $('taskName').value.trim();
-  const dueDate = $('taskDue').value || null;
+  const dueDateOnly = $('taskDue').value || null;
+  const dueTime = $('taskDueTime').value || null;
+  const dueDate = dueDateOnly
+    ? (dueTime ? `${dueDateOnly}T${dueTime}:00` : dueDateOnly)
+    : null;
   const priority = $('taskPriority').value || null;
   const project = [...document.querySelectorAll('#projectCheck input:checked')].map(el => el.value);
   const notes = $('taskNotes').value.trim() || null;
@@ -745,10 +786,10 @@ $('addForm').addEventListener('submit', async e => {
     closeModal();
 
     // Only add to local view if the task is due today or overdue
-    if (newTask.dueDate && newTask.dueDate <= today) {
+    if (newTask.dueDate && dateOnlyPart(newTask.dueDate) <= today) {
       tasks = [newTask, ...tasks];
-      const todayCount = tasks.filter(t => t.dueDate === today).length;
-      const overdueCount = tasks.filter(t => t.dueDate && t.dueDate < today).length;
+      const todayCount = tasks.filter(t => dateOnlyPart(t.dueDate) === today).length;
+      const overdueCount = tasks.filter(t => t.dueDate && dateOnlyPart(t.dueDate) < today).length;
       $('statToday').textContent = todayCount;
       $('statOverdue').textContent = overdueCount;
       renderTasks();
