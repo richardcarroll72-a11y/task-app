@@ -81,6 +81,7 @@
     .btn-refresh:hover { background: var(--bg); }
     .btn-refresh.spinning { animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .app-version { font-size: 0.65rem; color: var(--muted); opacity: 0.6; text-align: right; margin-top: 2px; }
 
     /* ── Stats bar ── */
     .stats-bar {
@@ -444,7 +445,10 @@
       <h1>📋 My Tasks</h1>
       <div class="header-date" id="headerDate"></div>
     </div>
-    <button class="btn-refresh" id="refreshBtn" title="Refresh" aria-label="Refresh tasks">↻</button>
+    <div>
+      <button class="btn-refresh" id="refreshBtn" title="Refresh" aria-label="Refresh tasks">↻</button>
+      <div class="app-version">v1.2.0</div>
+    </div>
   </div>
   <div class="stats-bar">
     <div class="stat-chip today">
