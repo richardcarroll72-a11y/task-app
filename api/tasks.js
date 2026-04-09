@@ -65,6 +65,11 @@ module.exports = async (req, res) => {
     // ─── GET /api/tasks ───────────────────────────────────────────────────────
     if (req.method === 'GET') {
       const today = new Date().toISOString().split('T')[0];
+      // Use tomorrow (UTC) as the cutoff so tasks with late-evening times in
+      // western timezones (whose UTC date rolls to the next day) are not excluded.
+      const tomorrowDate = new Date();
+      tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+      const tomorrow = tomorrowDate.toISOString().split('T')[0];
 
       const data = await fetchNotion(`/databases/${DATABASE_ID}/query`, {
         method: 'POST',
@@ -77,7 +82,7 @@ module.exports = async (req, res) => {
               },
               {
                 property: 'Due Date',
-                date: { on_or_before: today },
+                date: { before: tomorrow },
               },
             ],
           },

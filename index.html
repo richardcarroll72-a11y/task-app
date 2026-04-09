@@ -534,7 +534,9 @@
 <script>
 // ── Utilities ────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
-const today = new Date().toISOString().split('T')[0];
+// Use local date (not UTC) so comparisons are correct regardless of timezone
+const _now = new Date();
+const today = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}-${String(_now.getDate()).padStart(2,'0')}`;
 
 // ── Date helpers ─────────────────────────────────────────────────────────────
 function hasTime(dateStr) {
@@ -581,9 +583,20 @@ function formatDate(dateStr) {
   return timeStr ? `${datePart} at ${timeStr}` : datePart;
 }
 
+// Returns local YYYY-MM-DD for any Notion date/datetime string
+function localDateStr(dateStr) {
+  const d = parseNotionDate(dateStr);
+  if (!d || isNaN(d.getTime())) return null;
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
 function isDueLaterToday(task) {
-  if (!task.dueDate || !hasTime(task.dueDate)) return false;
-  if (dateOnlyPart(task.dueDate) !== today) return false;
+  if (!task.dueDate) return false;
+  if (localDateStr(task.dueDate) !== today) return false;
+  // Date-only tasks: parseNotionDate returns local midnight, which is always
+  // in the past by the time the page is open — they stay in Due Today.
+  // Tasks with an explicit future time (hasTime) qualify as Due Later.
+  if (!hasTime(task.dueDate)) return false;
   const dueTime = parseNotionDate(task.dueDate);
   return dueTime && dueTime > new Date();
 }
@@ -659,10 +672,12 @@ function renderTasks() {
     return;
   }
 
-  const allTodayTasks = tasks.filter(t => dateOnlyPart(t.dueDate) === today);
+  console.log('[tasks] raw dueDate values:', tasks.map(t => t.dueDate));
+  const allTodayTasks = tasks.filter(t => localDateStr(t.dueDate) === today);
   const dueLaterTasks = allTodayTasks.filter(t => isDueLaterToday(t));
   const todayTasks = allTodayTasks.filter(t => !isDueLaterToday(t));
-  const overdueTasks = tasks.filter(t => t.dueDate && dateOnlyPart(t.dueDate) < today);
+  const overdueTasks = tasks.filter(t => t.dueDate && localDateStr(t.dueDate) < today);
+  console.log('[tasks] today:', today, '| allToday:', allTodayTasks.length, '| dueLater:', dueLaterTasks.length, '| overdue:', overdueTasks.length);
 
   let html = '';
 
