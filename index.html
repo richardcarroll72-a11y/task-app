@@ -135,6 +135,7 @@
     }
     .task-card:hover { box-shadow: var(--shadow-md); }
     .task-card:active { transform: scale(0.99); }
+    .task-card.later { opacity: 0.5; }
     .task-card.completing {
       opacity: 0;
       transform: translateX(60px);
@@ -580,6 +581,13 @@ function formatDate(dateStr) {
   return timeStr ? `${datePart} at ${timeStr}` : datePart;
 }
 
+function isDueLaterToday(task) {
+  if (!task.dueDate || !hasTime(task.dueDate)) return false;
+  if (dateOnlyPart(task.dueDate) !== today) return false;
+  const dueTime = parseNotionDate(task.dueDate);
+  return dueTime && dueTime > new Date();
+}
+
 function priorityClass(p) {
   if (!p) return 'badge-none';
   if (p.startsWith('High')) return 'badge-high';
@@ -651,19 +659,26 @@ function renderTasks() {
     return;
   }
 
-  const todayTasks = tasks.filter(t => dateOnlyPart(t.dueDate) === today);
+  const allTodayTasks = tasks.filter(t => dateOnlyPart(t.dueDate) === today);
+  const dueLaterTasks = allTodayTasks.filter(t => isDueLaterToday(t));
+  const todayTasks = allTodayTasks.filter(t => !isDueLaterToday(t));
   const overdueTasks = tasks.filter(t => t.dueDate && dateOnlyPart(t.dueDate) < today);
 
   let html = '';
 
   if (todayTasks.length > 0) {
     html += `<div class="section-label">📅 Due Today (${todayTasks.length})</div>`;
-    html += todayTasks.map(taskCard).join('');
+    html += todayTasks.map(t => taskCard(t, false)).join('');
   }
 
   if (overdueTasks.length > 0) {
     html += `<div class="section-label">🔥 Overdue (${overdueTasks.length})</div>`;
-    html += overdueTasks.map(taskCard).join('');
+    html += overdueTasks.map(t => taskCard(t, false)).join('');
+  }
+
+  if (dueLaterTasks.length > 0) {
+    html += `<div class="section-label">⏰ Due Later (${dueLaterTasks.length})</div>`;
+    html += dueLaterTasks.map(t => taskCard(t, true)).join('');
   }
 
   html += `<a class="notion-link" href="https://www.notion.so/64204e6b365f836c83798111f9c55f5a?v=33904e6b365f81d9884f000c75f1408d" target="_blank" rel="noopener">
@@ -681,7 +696,7 @@ function renderTasks() {
   });
 }
 
-function taskCard(task) {
+function taskCard(task, isLater = false) {
   const dateLabel = formatDate(task.dueDate);
   const isOverdue = task.dueDate && dateOnlyPart(task.dueDate) < today;
   const dateClass = isOverdue ? 'overdue' : (dateOnlyPart(task.dueDate) === today ? 'today' : '');
@@ -706,7 +721,7 @@ function taskCard(task) {
     : '';
 
   return `
-    <div class="task-card" data-id="${task.id}">
+    <div class="task-card${isLater ? ' later' : ''}" data-id="${task.id}">
       <button class="check-btn" data-id="${task.id}" title="Mark complete" aria-label="Mark '${task.name}' complete"></button>
       <div class="task-body">
         <div class="task-name">${escHtml(task.name)}</div>
