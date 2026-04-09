@@ -45,6 +45,7 @@ function mapPage(page) {
     priority: props['Priority']?.select?.name || '',
     project: (props['Project']?.multi_select || []).map(p => p.name),
     notes: props['Notes']?.rich_text?.map(t => t.plain_text).join('') || '',
+    articleUrl: props['URL']?.url || null,
     dateCompleted: props['Date Completed']?.date?.start || null,
   };
 }

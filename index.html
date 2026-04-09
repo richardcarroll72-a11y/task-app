@@ -448,7 +448,7 @@
     </div>
     <div>
       <button class="btn-refresh" id="refreshBtn" title="Refresh" aria-label="Refresh tasks">↻</button>
-      <div class="app-version">v1.4.0</div>
+      <div class="app-version">v1.5.0</div>
     </div>
   </div>
   <div class="stats-bar">
@@ -727,12 +727,14 @@ function taskCard(task, isLater = false) {
     ? `<span class="badge ${priorityClass(task.priority)}">${priorityIcon(task.priority)} ${task.priority}</span>`
     : '';
 
-  // Extract the first URL from the Notes field so article tasks show a tap-able link
-  const urlMatch = task.notes && task.notes.match(/https?:\/\/[^\s\n]+/);
-  const articleUrl = urlMatch ? urlMatch[0] : null;
-  const linkBadge = articleUrl
-    ? `<a class="article-link" href="${escHtml(articleUrl)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">🔗 Open</a>`
-    : '';
+  // Use dedicated URL property first; fall back to first URL found in Notes
+  const urlFromNotes = (task.notes && task.notes.match(/https?:\/\/[^\s\n]+/)?.[0]) || null;
+  const primaryUrl = task.articleUrl || urlFromNotes;
+  const secondaryUrl = (task.articleUrl && urlFromNotes && urlFromNotes !== task.articleUrl) ? urlFromNotes : null;
+  const linkBadge = [
+    primaryUrl ? `<a class="article-link" href="${escHtml(primaryUrl)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">🔗 Open</a>` : '',
+    secondaryUrl ? `<a class="article-link" href="${escHtml(secondaryUrl)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">🔗 Notes</a>` : '',
+  ].join('');
 
   return `
     <div class="task-card${isLater ? ' later' : ''}" data-id="${task.id}">
