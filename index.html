@@ -448,7 +448,7 @@
     </div>
     <div>
       <button class="btn-refresh" id="refreshBtn" title="Refresh" aria-label="Refresh tasks">↻</button>
-      <div class="app-version">v1.3.0</div>
+      <div class="app-version">v1.4.0</div>
     </div>
   </div>
   <div class="stats-bar">
@@ -551,11 +551,11 @@ function dateOnlyPart(dateStr) {
 function parseNotionDate(dateStr) {
   if (!dateStr) return null;
   if (!hasTime(dateStr)) {
-    // Date-only: construct as local midnight to avoid UTC shift
+    // Date-only: treat as 7:00 AM local time (convention for tasks with no explicit time)
     const [y, m, d] = dateStr.split('-').map(Number);
-    return new Date(y, m - 1, d);
+    return new Date(y, m - 1, d, 7, 0, 0);
   }
-  // Datetime string: parse normally (handles ISO with or without timezone offset)
+  // Datetime string: parse normally (handles UTC +00:00 and local timezone offsets)
   return new Date(dateStr);
 }
 
@@ -593,10 +593,9 @@ function localDateStr(dateStr) {
 function isDueLaterToday(task) {
   if (!task.dueDate) return false;
   if (localDateStr(task.dueDate) !== today) return false;
-  // Date-only tasks: parseNotionDate returns local midnight, which is always
-  // in the past by the time the page is open — they stay in Due Today.
-  // Tasks with an explicit future time (hasTime) qualify as Due Later.
-  if (!hasTime(task.dueDate)) return false;
+  // parseNotionDate returns 7am for date-only tasks, so they fall into
+  // Due Today once it's past 7am. Tasks with an explicit future time
+  // show in Due Later until their scheduled time arrives.
   const dueTime = parseNotionDate(task.dueDate);
   return dueTime && dueTime > new Date();
 }

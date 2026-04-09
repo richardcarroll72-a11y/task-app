@@ -65,11 +65,14 @@ module.exports = async (req, res) => {
     // ─── GET /api/tasks ───────────────────────────────────────────────────────
     if (req.method === 'GET') {
       const today = new Date().toISOString().split('T')[0];
-      // Use tomorrow (UTC) as the cutoff so tasks with late-evening times in
-      // western timezones (whose UTC date rolls to the next day) are not excluded.
-      const tomorrowDate = new Date();
-      tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-      const tomorrow = tomorrowDate.toISOString().split('T')[0];
+      // Use day-after-tomorrow (UTC) as the cutoff. Notion stores times in UTC
+      // (+00:00), so a task at 8pm MDT (UTC-6) is stored as 2am UTC the next day.
+      // A cutoff of only "tomorrow UTC" would exclude those late-evening tasks.
+      // Adding an extra day guarantees all of today's tasks reach the frontend,
+      // which then filters to local-today only.
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() + 2);
+      const cutoff = cutoffDate.toISOString().split('T')[0];
 
       const data = await fetchNotion(`/databases/${DATABASE_ID}/query`, {
         method: 'POST',
@@ -82,7 +85,7 @@ module.exports = async (req, res) => {
               },
               {
                 property: 'Due Date',
-                date: { before: tomorrow },
+                date: { before: cutoff },
               },
             ],
           },

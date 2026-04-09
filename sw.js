@@ -1,7 +1,7 @@
 // Service Worker for My Tasks PWA
-const CACHE_NAME = 'my-tasks-v3';
+const CACHE_NAME = 'my-tasks-v4';
 const STATIC_ASSETS = ['/', '/index.html', '/manifest.json'];
-const API_CACHE = 'my-tasks-api-v3';
+const API_CACHE = 'my-tasks-api-v4';
 
 // Install: cache static assets
 self.addEventListener('install', event => {
