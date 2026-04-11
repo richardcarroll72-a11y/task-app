@@ -39,7 +39,7 @@ function mapPage(page) {
     id: page.id,
     url: page.url,
     name: props['Name']?.title?.map(t => t.plain_text).join('') || 'Untitled',
-    status: props['Status 1']?.status?.name || '',
+    status: props['Status']?.status?.name || '',
     dueDate: dueStart,
     isOverdue,
     priority: props['Priority']?.select?.name || '',
@@ -81,7 +81,7 @@ module.exports = async (req, res) => {
           filter: {
             and: [
               {
-                property: 'Status 1',
+                property: 'Status',
                 status: { does_not_equal: 'Done' },
               },
               {
@@ -122,7 +122,7 @@ module.exports = async (req, res) => {
 
       const properties = {
         'Name': { title: [{ text: { content: name.trim() } }] },
-        'Status 1': { status: { name: 'Not started' } },
+        'Status': { status: { name: 'Not started' } },
       };
 
       if (dueDate) {
@@ -157,7 +157,7 @@ module.exports = async (req, res) => {
         method: 'PATCH',
         body: JSON.stringify({
           properties: {
-            'Status 1': { status: { name: 'Done' } },
+            'Status': { status: { name: 'Done' } },
             'Date Completed': { date: { start: today } },
           },
         }),
