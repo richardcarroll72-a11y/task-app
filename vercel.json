@@ -4,24 +4,12 @@
     "api/tasks.js": {
       "memory": 128,
       "maxDuration": 15
-    },
-    "api/claude-usage.js": {
-      "memory": 128,
-      "maxDuration": 15
     }
   },
   "routes": [
     {
       "src": "/api/tasks",
       "dest": "/api/tasks.js"
-    },
-    {
-      "src": "/api/claude-usage",
-      "dest": "/api/claude-usage.js"
-    },
-    {
-      "src": "/claude-usage",
-      "dest": "/claude-usage.html"
     },
     {
       "src": "/(.*)",
