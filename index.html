@@ -135,7 +135,6 @@
     }
     .task-card:hover { box-shadow: var(--shadow-md); }
     .task-card:active { transform: scale(0.99); }
-    .task-card.later { opacity: 0.5; }
     .task-card.completing {
       opacity: 0;
       transform: translateX(60px);
@@ -448,7 +447,7 @@
     </div>
     <div>
       <button class="btn-refresh" id="refreshBtn" title="Refresh" aria-label="Refresh tasks">↻</button>
-      <div class="app-version">v1.5.0</div>
+      <div class="app-version">v1.2.0</div>
     </div>
   </div>
   <div class="stats-bar">
@@ -534,9 +533,9 @@
 <script>
 // ── Utilities ────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
-// Use local date (not UTC) so comparisons are correct regardless of timezone
-const _now = new Date();
-const today = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}-${String(_now.getDate()).padStart(2,'0')}`;
+// Use local date (not UTC) so "today" matches the user's timezone.
+// toLocaleDateString('en-CA') returns YYYY-MM-DD in the browser's local timezone.
+const today = new Date().toLocaleDateString('en-CA');
 
 // ── Date helpers ─────────────────────────────────────────────────────────────
 function hasTime(dateStr) {
@@ -551,11 +550,11 @@ function dateOnlyPart(dateStr) {
 function parseNotionDate(dateStr) {
   if (!dateStr) return null;
   if (!hasTime(dateStr)) {
-    // Date-only: treat as 7:00 AM local time (convention for tasks with no explicit time)
+    // Date-only: construct as local midnight to avoid UTC shift
     const [y, m, d] = dateStr.split('-').map(Number);
-    return new Date(y, m - 1, d, 7, 0, 0);
+    return new Date(y, m - 1, d);
   }
-  // Datetime string: parse normally (handles UTC +00:00 and local timezone offsets)
+  // Datetime string: parse normally (handles ISO with or without timezone offset)
   return new Date(dateStr);
 }
 
@@ -581,23 +580,6 @@ function formatDate(dateStr) {
   else datePart = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
   return timeStr ? `${datePart} at ${timeStr}` : datePart;
-}
-
-// Returns local YYYY-MM-DD for any Notion date/datetime string
-function localDateStr(dateStr) {
-  const d = parseNotionDate(dateStr);
-  if (!d || isNaN(d.getTime())) return null;
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-
-function isDueLaterToday(task) {
-  if (!task.dueDate) return false;
-  if (localDateStr(task.dueDate) !== today) return false;
-  // parseNotionDate returns 7am for date-only tasks, so they fall into
-  // Due Today once it's past 7am. Tasks with an explicit future time
-  // show in Due Later until their scheduled time arrives.
-  const dueTime = parseNotionDate(task.dueDate);
-  return dueTime && dueTime > new Date();
 }
 
 function priorityClass(p) {
@@ -671,28 +653,19 @@ function renderTasks() {
     return;
   }
 
-  console.log('[tasks] raw dueDate values:', tasks.map(t => t.dueDate));
-  const allTodayTasks = tasks.filter(t => localDateStr(t.dueDate) === today);
-  const dueLaterTasks = allTodayTasks.filter(t => isDueLaterToday(t));
-  const todayTasks = allTodayTasks.filter(t => !isDueLaterToday(t));
-  const overdueTasks = tasks.filter(t => t.dueDate && localDateStr(t.dueDate) < today);
-  console.log('[tasks] today:', today, '| allToday:', allTodayTasks.length, '| dueLater:', dueLaterTasks.length, '| overdue:', overdueTasks.length);
+  const todayTasks = tasks.filter(t => dateOnlyPart(t.dueDate) === today);
+  const overdueTasks = tasks.filter(t => t.dueDate && dateOnlyPart(t.dueDate) < today);
 
   let html = '';
 
   if (todayTasks.length > 0) {
     html += `<div class="section-label">📅 Due Today (${todayTasks.length})</div>`;
-    html += todayTasks.map(t => taskCard(t, false)).join('');
+    html += todayTasks.map(taskCard).join('');
   }
 
   if (overdueTasks.length > 0) {
     html += `<div class="section-label">🔥 Overdue (${overdueTasks.length})</div>`;
-    html += overdueTasks.map(t => taskCard(t, false)).join('');
-  }
-
-  if (dueLaterTasks.length > 0) {
-    html += `<div class="section-label">⏰ Due Later (${dueLaterTasks.length})</div>`;
-    html += dueLaterTasks.map(t => taskCard(t, true)).join('');
+    html += overdueTasks.map(taskCard).join('');
   }
 
   html += `<a class="notion-link" href="https://www.notion.so/64204e6b365f836c83798111f9c55f5a?v=33904e6b365f81d9884f000c75f1408d" target="_blank" rel="noopener">
@@ -710,7 +683,7 @@ function renderTasks() {
   });
 }
 
-function taskCard(task, isLater = false) {
+function taskCard(task) {
   const dateLabel = formatDate(task.dueDate);
   const isOverdue = task.dueDate && dateOnlyPart(task.dueDate) < today;
   const dateClass = isOverdue ? 'overdue' : (dateOnlyPart(task.dueDate) === today ? 'today' : '');
@@ -727,17 +700,15 @@ function taskCard(task, isLater = false) {
     ? `<span class="badge ${priorityClass(task.priority)}">${priorityIcon(task.priority)} ${task.priority}</span>`
     : '';
 
-  // Use dedicated URL property first; fall back to first URL found in Notes
-  const urlFromNotes = (task.notes && task.notes.match(/https?:\/\/[^\s\n]+/)?.[0]) || null;
-  const primaryUrl = task.articleUrl || urlFromNotes;
-  const secondaryUrl = (task.articleUrl && urlFromNotes && urlFromNotes !== task.articleUrl) ? urlFromNotes : null;
-  const linkBadge = [
-    primaryUrl ? `<a class="article-link" href="${escHtml(primaryUrl)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">🔗 Open</a>` : '',
-    secondaryUrl ? `<a class="article-link" href="${escHtml(secondaryUrl)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">🔗 Notes</a>` : '',
-  ].join('');
+  // Extract the first URL from the Notes field so article tasks show a tap-able link
+  const urlMatch = task.notes && task.notes.match(/https?:\/\/[^\s\n]+/);
+  const articleUrl = urlMatch ? urlMatch[0] : null;
+  const linkBadge = articleUrl
+    ? `<a class="article-link" href="${escHtml(articleUrl)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">🔗 Open</a>`
+    : '';
 
   return `
-    <div class="task-card${isLater ? ' later' : ''}" data-id="${task.id}">
+    <div class="task-card" data-id="${task.id}">
       <button class="check-btn" data-id="${task.id}" title="Mark complete" aria-label="Mark '${task.name}' complete"></button>
       <div class="task-body">
         <div class="task-name">${escHtml(task.name)}</div>
