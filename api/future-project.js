@@ -78,7 +78,7 @@ module.exports = async (req, res) => {
     // Step 1: Create Future Projects entry (if this fails, task is NOT marked Done)
     const fpProperties = {
       'Name': { title: [{ text: { content: projectName.trim() } }] },
-      'Status': { status: { name: 'Parked 🅿️' } },
+      'Status': { select: { name: 'Parked 🅿️' } },
       'SPIRE': { select: { name: spire } },
     };
     if (fullNotes) fpProperties['Notes'] = { rich_text: [{ text: { content: fullNotes.slice(0, 2000) } }] };
