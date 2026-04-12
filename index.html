@@ -432,6 +432,88 @@
       transition: background 0.15s, border-color 0.15s;
     }
     .article-link:hover { background: #c7d2fe; border-color: var(--primary); }
+
+    /* ── Park (Future Project) button ── */
+    .park-btn {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      background: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 1px;
+      font-size: 0.75rem;
+      line-height: 1;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .park-btn:hover { border-color: #818cf8; background: #eef2ff; }
+    .park-btn:active { opacity: 0.7; }
+
+    /* ── SPIRE picker ── */
+    .spire-picker {
+      display: flex;
+      gap: 6px;
+    }
+    .spire-btn {
+      flex: 1;
+      padding: 8px 4px;
+      border-radius: 8px;
+      border: 2px solid var(--border);
+      background: none;
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-align: center;
+      line-height: 1.3;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .spire-btn[data-spire="S"] { color: #7c3aed; }
+    .spire-btn[data-spire="S"].selected { border-color: #7c3aed; background: #ede9fe; }
+    .spire-btn[data-spire="P"] { color: #059669; }
+    .spire-btn[data-spire="P"].selected { border-color: #059669; background: #d1fae5; }
+    .spire-btn[data-spire="I"] { color: #2563eb; }
+    .spire-btn[data-spire="I"].selected { border-color: #2563eb; background: #dbeafe; }
+    .spire-btn[data-spire="R"] { color: #d97706; }
+    .spire-btn[data-spire="R"].selected { border-color: #d97706; background: #fef3c7; }
+    .spire-btn[data-spire="E"] { color: #db2777; }
+    .spire-btn[data-spire="E"].selected { border-color: #db2777; background: #fce7f3; }
+
+    .field-error {
+      color: var(--red);
+      font-size: 0.78rem;
+      margin-top: 5px;
+      display: none;
+    }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed;
+      bottom: calc(88px + var(--safe-bottom));
+      left: 50%;
+      transform: translateX(-50%) translateY(16px);
+      background: #1e1e2e;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 24px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      z-index: 200;
+      opacity: 0;
+      transition: opacity 0.2s, transform 0.2s;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* ── Desktop: center modals ── */
+    @media (min-width: 641px) {
+      #fpModalOverlay { align-items: center; }
+      #fpModalOverlay .modal { border-radius: var(--radius); max-height: 85vh; overflow-y: auto; }
+    }
   </style>
 </head>
 <body>
@@ -448,7 +530,7 @@
     </div>
     <div>
       <button class="btn-refresh" id="refreshBtn" title="Refresh" aria-label="Refresh tasks">↻</button>
-      <div class="app-version">v1.5.0</div>
+      <div class="app-version">v1.6.0</div>
     </div>
   </div>
   <div class="stats-bar">
@@ -530,6 +612,36 @@
     </form>
   </div>
 </div>
+
+<!-- Future Project Modal -->
+<div class="modal-overlay" id="fpModalOverlay" role="dialog" aria-modal="true" aria-label="Park as Future Project">
+  <div class="modal">
+    <h2>🚀 Park as Future Project</h2>
+    <div class="form-group">
+      <label for="fpProjectName">Project name</label>
+      <input type="text" id="fpProjectName" placeholder="What's the project?" autocomplete="off" />
+      <div class="field-error" id="fpNameError"></div>
+    </div>
+    <div class="form-group">
+      <label>SPIRE dimension</label>
+      <div class="spire-picker">
+        <button type="button" class="spire-btn" data-spire="S">S<br><span style="font-size:0.65rem;font-weight:500">Spiritual</span></button>
+        <button type="button" class="spire-btn" data-spire="P">P<br><span style="font-size:0.65rem;font-weight:500">Physical</span></button>
+        <button type="button" class="spire-btn" data-spire="I">I<br><span style="font-size:0.65rem;font-weight:500">Intellectual</span></button>
+        <button type="button" class="spire-btn" data-spire="R">R<br><span style="font-size:0.65rem;font-weight:500">Relational</span></button>
+        <button type="button" class="spire-btn" data-spire="E">E<br><span style="font-size:0.65rem;font-weight:500">Emotional</span></button>
+      </div>
+      <div class="field-error" id="fpSpireError"></div>
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn btn-secondary" id="fpCancelBtn">Cancel</button>
+      <button type="button" class="btn btn-primary" id="fpSubmitBtn">Park It 🚀</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
 
 <script>
 // ── Utilities ────────────────────────────────────────────────────────────────
@@ -708,6 +820,14 @@ function renderTasks() {
       markComplete(btn.dataset.id, btn);
     });
   });
+
+  // Attach park listeners
+  list.querySelectorAll('.park-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      openParkModal(btn.dataset.id, btn.dataset.name, btn.dataset.url, btn.dataset.notes);
+    });
+  });
 }
 
 function taskCard(task, isLater = false) {
@@ -748,6 +868,7 @@ function taskCard(task, isLater = false) {
           ${linkBadge}
         </div>
       </div>
+      <button class="park-btn" data-id="${task.id}" data-name="${escHtml(task.name)}" data-url="${escHtml(task.url || '')}" data-notes="${escHtml(task.notes || '')}" title="Park as Future Project" aria-label="Park '${task.name}' as Future Project">🚀</button>
     </div>`;
 }
 
@@ -812,7 +933,7 @@ $('modalOverlay').addEventListener('click', e => {
 });
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeModal();
+  if (e.key === 'Escape') { closeModal(); closeParkModal(); }
 });
 
 $('addForm').addEventListener('submit', async e => {
@@ -888,6 +1009,148 @@ window.addEventListener('offline', () => {
 // ── Service worker ───────────────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(console.error);
+}
+
+// ── Future Project Modal ─────────────────────────────────────────────────────
+const SPIRE_MAP = {
+  'S': 'S — Spiritual',
+  'P': 'P — Physical',
+  'I': 'I — Intellectual',
+  'R': 'R — Relational',
+  'E': 'E — Emotional',
+};
+
+let _fpTaskId = null;
+let _fpTaskUrl = null;
+let _fpTaskNotes = null;
+let _fpSpire = null;
+
+function openParkModal(taskId, taskName, taskUrl, taskNotes) {
+  _fpTaskId = taskId;
+  _fpTaskUrl = taskUrl;
+  _fpTaskNotes = taskNotes;
+  _fpSpire = null;
+  $('fpProjectName').value = taskName;
+  $('fpNameError').style.display = 'none';
+  $('fpSpireError').style.display = 'none';
+  document.querySelectorAll('.spire-btn').forEach(b => b.classList.remove('selected'));
+  $('fpSubmitBtn').disabled = false;
+  $('fpSubmitBtn').textContent = 'Park It 🚀';
+  $('fpModalOverlay').classList.add('open');
+  setTimeout(() => $('fpProjectName').focus(), 50);
+}
+
+function closeParkModal() {
+  $('fpModalOverlay').classList.remove('open');
+  _fpTaskId = null;
+  _fpTaskUrl = null;
+  _fpTaskNotes = null;
+  _fpSpire = null;
+}
+
+document.querySelectorAll('.spire-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.spire-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    _fpSpire = btn.dataset.spire;
+    $('fpSpireError').style.display = 'none';
+  });
+});
+
+$('fpCancelBtn').addEventListener('click', closeParkModal);
+$('fpModalOverlay').addEventListener('click', e => {
+  if (e.target === $('fpModalOverlay')) closeParkModal();
+});
+
+$('fpSubmitBtn').addEventListener('click', async () => {
+  const projectName = $('fpProjectName').value.trim();
+  let valid = true;
+
+  if (!projectName) {
+    $('fpNameError').textContent = 'Project name is required';
+    $('fpNameError').style.display = 'block';
+    valid = false;
+  } else {
+    $('fpNameError').style.display = 'none';
+  }
+
+  if (!_fpSpire) {
+    $('fpSpireError').textContent = 'Please select a SPIRE dimension';
+    $('fpSpireError').style.display = 'block';
+    valid = false;
+  } else {
+    $('fpSpireError').style.display = 'none';
+  }
+
+  if (!valid) return;
+
+  // Capture state before closing modal
+  const taskId = _fpTaskId;
+  const taskUrl = _fpTaskUrl;
+  const taskNotes = _fpTaskNotes;
+  const spire = SPIRE_MAP[_fpSpire];
+  const task = tasks.find(t => t.id === taskId);
+
+  // Optimistic: fade out card
+  const card = document.querySelector(`.task-card[data-id="${taskId}"]`);
+  if (card) {
+    card.style.transition = 'opacity 0.3s';
+    card.style.opacity = '0';
+  }
+
+  closeParkModal();
+
+  try {
+    const res = await fetch('/api/future-project', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        taskId,
+        taskName: task?.name || '',
+        projectName,
+        spire,
+        notes: taskNotes || '',
+        taskUrl: taskUrl || '',
+        clientDate: today,
+      }),
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      tasks = tasks.filter(t => t.id !== taskId);
+      const todayCount = tasks.filter(t => dateOnlyPart(t.dueDate) === today).length;
+      const overdueCount = tasks.filter(t => t.dueDate && dateOnlyPart(t.dueDate) < today).length;
+      $('statToday').textContent = todayCount;
+      $('statOverdue').textContent = overdueCount;
+      renderTasks();
+      showToast('Parked as Future Project 🚀');
+    } else {
+      if (card && card.isConnected) {
+        card.style.opacity = '1';
+      } else {
+        renderTasks();
+      }
+      showToast('Something went wrong — try again');
+    }
+  } catch (err) {
+    console.error('future-project error:', err);
+    if (card && card.isConnected) {
+      card.style.opacity = '1';
+    } else {
+      renderTasks();
+    }
+    showToast('Something went wrong — try again');
+  }
+});
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+let _toastTimer = null;
+function showToast(msg) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────

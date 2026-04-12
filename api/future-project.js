@@ -1,0 +1,99 @@
+// Vercel Serverless Function — Park task as Future Project
+// POST /api/future-project
+
+const NOTION_API = 'https://api.notion.com/v1';
+const NOTION_VERSION = '2022-06-28';
+
+function notionHeaders() {
+  return {
+    'Authorization': `Bearer ${process.env.NOTION_TOKEN}`,
+    'Notion-Version': NOTION_VERSION,
+    'Content-Type': 'application/json',
+  };
+}
+
+async function fetchNotion(path, options = {}) {
+  const res = await fetch(`${NOTION_API}${path}`, {
+    ...options,
+    headers: { ...notionHeaders(), ...(options.headers || {}) },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `Notion API error ${res.status}`);
+  }
+  return res.json();
+}
+
+const VALID_SPIRE = [
+  'S — Spiritual',
+  'P — Physical',
+  'I — Intellectual',
+  'R — Relational',
+  'E — Emotional',
+];
+
+module.exports = async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' });
+
+  if (!process.env.NOTION_TOKEN) {
+    return res.status(500).json({ success: false, error: 'NOTION_TOKEN not set' });
+  }
+  if (!process.env.NOTION_DATABASE_ID) {
+    return res.status(500).json({ success: false, error: 'NOTION_DATABASE_ID not set' });
+  }
+  const FUTURE_PROJECTS_DB_ID = process.env.NOTION_FUTURE_PROJECTS_DB_ID;
+  if (!FUTURE_PROJECTS_DB_ID) {
+    return res.status(500).json({ success: false, error: 'NOTION_FUTURE_PROJECTS_DB_ID not set' });
+  }
+
+  const { taskId, taskName, projectName, spire, notes, taskUrl, clientDate } = req.body || {};
+
+  if (!taskId) return res.status(400).json({ success: false, error: 'taskId is required' });
+  if (!projectName?.trim()) return res.status(400).json({ success: false, error: 'projectName is required' });
+  if (!spire) return res.status(400).json({ success: false, error: 'spire is required' });
+  if (!VALID_SPIRE.includes(spire)) {
+    return res.status(400).json({ success: false, error: `spire must be one of: ${VALID_SPIRE.join(', ')}` });
+  }
+
+  try {
+    // Step 1: Create Future Projects entry (if this fails, task is NOT marked Done)
+    const fpProperties = {
+      'Name': { title: [{ text: { content: projectName.trim() } }] },
+      'Status': { select: { name: 'Parked 🅿️' } },
+      'SPIRE': { select: { name: spire } },
+    };
+    if (taskUrl) fpProperties['Source Task'] = { url: taskUrl };
+    if (taskName) fpProperties['Original Task Name'] = { rich_text: [{ text: { content: taskName } }] };
+    if (notes?.trim()) fpProperties['Notes'] = { rich_text: [{ text: { content: notes.trim() } }] };
+
+    const fpPage = await fetchNotion('/pages', {
+      method: 'POST',
+      body: JSON.stringify({
+        parent: { database_id: FUTURE_PROJECTS_DB_ID },
+        properties: fpProperties,
+      }),
+    });
+
+    // Step 2: Mark original task Done (only runs after FP entry succeeds)
+    const today = clientDate || new Date().toISOString().split('T')[0];
+    await fetchNotion(`/pages/${taskId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        properties: {
+          'Status': { status: { name: 'Done' } },
+          'Date Completed': { date: { start: today } },
+        },
+      }),
+    });
+
+    return res.status(200).json({ success: true, futureProjectUrl: fpPage.url });
+  } catch (err) {
+    console.error('future-project API error:', err);
+    return res.status(200).json({ success: false, error: err.message || 'Internal server error' });
+  }
+};
