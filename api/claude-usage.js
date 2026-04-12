@@ -1,7 +1,7 @@
 // Vercel serverless proxy for Anthropic Usage & Cost Admin API
 // Requires an Admin API key (sk-ant-admin...) passed via x-api-key header
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // CORS headers — allow the Vercel deployment to call this
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
