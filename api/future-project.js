@@ -51,7 +51,10 @@ module.exports = async (req, res) => {
     return res.status(500).json({ success: false, error: 'NOTION_FUTURE_PROJECTS_DB_ID not set' });
   }
 
-  const { taskId, taskName, projectName, spire, notes, taskUrl, clientDate } = req.body || {};
+  const {
+    taskId, taskName, projectName, spire, notes, taskUrl, clientDate,
+    priority, project, dueDate, articleUrl,
+  } = req.body || {};
 
   if (!taskId) return res.status(400).json({ success: false, error: 'taskId is required' });
   if (!projectName?.trim()) return res.status(400).json({ success: false, error: 'projectName is required' });
@@ -61,15 +64,33 @@ module.exports = async (req, res) => {
   }
 
   try {
+    // Build comprehensive notes combining all task metadata
+    const notesLines = [];
+    if (taskName) notesLines.push(`Task: ${taskName}`);
+    if (priority) notesLines.push(`Priority: ${priority}`);
+    if (Array.isArray(project) && project.length) notesLines.push(`Project: ${project.join(', ')}`);
+    if (dueDate) notesLines.push(`Due date: ${dueDate}`);
+    if (articleUrl) notesLines.push(`Article URL: ${articleUrl}`);
+    if (taskUrl) notesLines.push(`Notion task: ${taskUrl}`);
+    if (notes?.trim()) {
+      if (notesLines.length) notesLines.push('');
+      notesLines.push(notes.trim());
+    }
+    const fullNotes = notesLines.join('\n');
+
     // Step 1: Create Future Projects entry (if this fails, task is NOT marked Done)
     const fpProperties = {
       'Name': { title: [{ text: { content: projectName.trim() } }] },
-      'Status': { select: { name: 'Parked 🅿️' } },
+      'Status': { status: { name: 'Parked 🅿️' } },
       'SPIRE': { select: { name: spire } },
     };
-    if (taskUrl) fpProperties['Source Task'] = { url: taskUrl };
-    if (taskName) fpProperties['Original Task Name'] = { rich_text: [{ text: { content: taskName } }] };
-    if (notes?.trim()) fpProperties['Notes'] = { rich_text: [{ text: { content: notes.trim() } }] };
+    if (fullNotes) fpProperties['Notes'] = { rich_text: [{ text: { content: fullNotes.slice(0, 2000) } }] };
+    if (articleUrl) fpProperties['URL'] = { url: articleUrl };
+    if (priority) fpProperties['Priority'] = { select: { name: priority } };
+    if (Array.isArray(project) && project.length) {
+      fpProperties['Project'] = { multi_select: project.map(p => ({ name: p })) };
+    }
+    if (dueDate) fpProperties['Due Date'] = { date: { start: dueDate.split('T')[0] } };
 
     const fpPage = await fetchNotion('/pages', {
       method: 'POST',

@@ -825,7 +825,11 @@ function renderTasks() {
   list.querySelectorAll('.park-btn').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
-      openParkModal(btn.dataset.id, btn.dataset.name, btn.dataset.url, btn.dataset.notes);
+      openParkModal(
+        btn.dataset.id, btn.dataset.name, btn.dataset.url, btn.dataset.notes,
+        btn.dataset.priority, JSON.parse(btn.dataset.project || '[]'),
+        btn.dataset.dueDate, btn.dataset.articleUrl
+      );
     });
   });
 }
@@ -868,7 +872,7 @@ function taskCard(task, isLater = false) {
           ${linkBadge}
         </div>
       </div>
-      <button class="park-btn" data-id="${task.id}" data-name="${escHtml(task.name)}" data-url="${escHtml(task.url || '')}" data-notes="${escHtml(task.notes || '')}" title="Park as Future Project" aria-label="Park '${task.name}' as Future Project">🚀</button>
+      <button class="park-btn" data-id="${task.id}" data-name="${escHtml(task.name)}" data-url="${escHtml(task.url || '')}" data-notes="${escHtml(task.notes || '')}" data-priority="${escHtml(task.priority || '')}" data-project="${escHtml(JSON.stringify(task.project || []))}" data-due-date="${escHtml(task.dueDate || '')}" data-article-url="${escHtml(task.articleUrl || '')}" title="Park as Future Project" aria-label="Park '${task.name}' as Future Project">🚀</button>
     </div>`;
 }
 
@@ -1024,12 +1028,20 @@ let _fpTaskId = null;
 let _fpTaskUrl = null;
 let _fpTaskNotes = null;
 let _fpSpire = null;
+let _fpPriority = null;
+let _fpProject = null;
+let _fpDueDate = null;
+let _fpArticleUrl = null;
 
-function openParkModal(taskId, taskName, taskUrl, taskNotes) {
+function openParkModal(taskId, taskName, taskUrl, taskNotes, priority, project, dueDate, articleUrl) {
   _fpTaskId = taskId;
   _fpTaskUrl = taskUrl;
   _fpTaskNotes = taskNotes;
   _fpSpire = null;
+  _fpPriority = priority || null;
+  _fpProject = project || [];
+  _fpDueDate = dueDate || null;
+  _fpArticleUrl = articleUrl || null;
   $('fpProjectName').value = taskName;
   $('fpNameError').style.display = 'none';
   $('fpSpireError').style.display = 'none';
@@ -1046,6 +1058,10 @@ function closeParkModal() {
   _fpTaskUrl = null;
   _fpTaskNotes = null;
   _fpSpire = null;
+  _fpPriority = null;
+  _fpProject = null;
+  _fpDueDate = null;
+  _fpArticleUrl = null;
 }
 
 document.querySelectorAll('.spire-btn').forEach(btn => {
@@ -1112,6 +1128,10 @@ $('fpSubmitBtn').addEventListener('click', async () => {
         notes: taskNotes || '',
         taskUrl: taskUrl || '',
         clientDate: today,
+        priority: _fpPriority || '',
+        project: _fpProject || [],
+        dueDate: _fpDueDate || '',
+        articleUrl: _fpArticleUrl || '',
       }),
     });
     const data = await res.json();
