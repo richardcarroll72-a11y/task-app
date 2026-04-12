@@ -27,13 +27,12 @@ async function fetchNotion(path, options = {}) {
   return res.json();
 }
 
-function mapPage(page) {
+function mapPage(page, today) {
   const props = page.properties;
   const dueStart = props['Due Date']?.date?.start || null;
-  const today = new Date().toISOString().split('T')[0];
   // Use date-only part for comparison so datetime strings (e.g. "2026-04-06T09:00:00+00:00") compare correctly
   const dueDateOnly = dueStart ? dueStart.split('T')[0] : null;
-  const isOverdue = dueDateOnly && dueDateOnly < today;
+  const isOverdue = dueDateOnly && today && dueDateOnly < today;
 
   return {
     id: page.id,
@@ -65,15 +64,10 @@ module.exports = async (req, res) => {
   try {
     // ─── GET /api/tasks ───────────────────────────────────────────────────────
     if (req.method === 'GET') {
-      const today = new Date().toISOString().split('T')[0];
-      // Use day-after-tomorrow (UTC) as the cutoff. Notion stores times in UTC
-      // (+00:00), so a task at 8pm MDT (UTC-6) is stored as 2am UTC the next day.
-      // A cutoff of only "tomorrow UTC" would exclude those late-evening tasks.
-      // Adding an extra day guarantees all of today's tasks reach the frontend,
-      // which then filters to local-today only.
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() + 2);
-      const cutoff = cutoffDate.toISOString().split('T')[0];
+      // Use the client's local date when available (passed as ?clientDate=YYYY-MM-DD)
+      // so "today" reflects the user's timezone, not Vercel's UTC clock.
+      // Without this, tasks due today in MDT (UTC-6) appear as "overdue" after 6 pm.
+      const today = req.query.clientDate || new Date().toISOString().split('T')[0];
 
       const data = await fetchNotion(`/databases/${DATABASE_ID}/query`, {
         method: 'POST',
@@ -86,7 +80,7 @@ module.exports = async (req, res) => {
               },
               {
                 property: 'Due Date',
-                date: { before: cutoff },
+                date: { on_or_before: today },
               },
             ],
           },
@@ -98,7 +92,7 @@ module.exports = async (req, res) => {
         }),
       });
 
-      const tasks = (data.results || []).map(mapPage);
+      const tasks = (data.results || []).map(page => mapPage(page, today));
 
       // Separate today vs overdue for stats (use date-only part to handle datetime strings)
       const todayTasks = tasks.filter(t => t.dueDate && t.dueDate.split('T')[0] === today);
@@ -151,7 +145,8 @@ module.exports = async (req, res) => {
       const { id } = req.query;
       if (!id) return res.status(400).json({ error: 'Task id is required' });
 
-      const today = new Date().toISOString().split('T')[0];
+      // Use client's local date so Date Completed records the right calendar day
+      const today = req.query.clientDate || new Date().toISOString().split('T')[0];
 
       const page = await fetchNotion(`/pages/${id}`, {
         method: 'PATCH',
@@ -163,7 +158,7 @@ module.exports = async (req, res) => {
         }),
       });
 
-      return res.status(200).json(mapPage(page));
+      return res.status(200).json(mapPage(page, today));
     }
 
     return res.status(405).json({ error: 'Method not allowed' });

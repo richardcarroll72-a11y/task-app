@@ -634,7 +634,7 @@ async function loadTasks() {
   hideError();
 
   try {
-    const res = await fetch('/api/tasks');
+    const res = await fetch(`/api/tasks?clientDate=${today}`);
     if (!res.ok) throw new Error(`Server error ${res.status}`);
     const data = await res.json();
 
@@ -766,7 +766,7 @@ async function markComplete(id, btn) {
   btn.innerHTML = '●';
 
   try {
-    const res = await fetch(`/api/tasks?id=${encodeURIComponent(id)}`, { method: 'PATCH' });
+    const res = await fetch(`/api/tasks?id=${encodeURIComponent(id)}&clientDate=${today}`, { method: 'PATCH' });
     if (!res.ok) throw new Error(`Error ${res.status}`);
 
     // Animate card out
