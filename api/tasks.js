@@ -38,12 +38,13 @@ function mapPage(page, today) {
     id: page.id,
     url: page.url,
     name: props['Name']?.title?.map(t => t.plain_text).join('') || 'Untitled',
-    status: props['Status 1']?.status?.name || '',
+    status: props['Status']?.status?.name || '',
     dueDate: dueStart,
     isOverdue,
     priority: props['Priority']?.select?.name || '',
     project: (props['Project']?.multi_select || []).map(p => p.name),
     notes: props['Notes']?.rich_text?.map(t => t.plain_text).join('') || '',
+    articleUrl: props['URL']?.url || null,
     dateCompleted: props['Date Completed']?.date?.start || null,
   };
 }
@@ -63,9 +64,9 @@ module.exports = async (req, res) => {
   try {
     // ─── GET /api/tasks ───────────────────────────────────────────────────────
     if (req.method === 'GET') {
-      // Prefer the client's local date (passed as ?clientDate=YYYY-MM-DD) so that
-      // the "today" bucket reflects the user's timezone rather than Vercel's UTC clock.
-      // Without this, tasks due today in e.g. MDT (UTC-6) appear as "overdue" after 6 pm.
+      // Use the client's local date when available (passed as ?clientDate=YYYY-MM-DD)
+      // so "today" reflects the user's timezone, not Vercel's UTC clock.
+      // Without this, tasks due today in MDT (UTC-6) appear as "overdue" after 6 pm.
       const today = req.query.clientDate || new Date().toISOString().split('T')[0];
 
       const data = await fetchNotion(`/databases/${DATABASE_ID}/query`, {
@@ -74,7 +75,7 @@ module.exports = async (req, res) => {
           filter: {
             and: [
               {
-                property: 'Status 1',
+                property: 'Status',
                 status: { does_not_equal: 'Done' },
               },
               {
@@ -115,7 +116,7 @@ module.exports = async (req, res) => {
 
       const properties = {
         'Name': { title: [{ text: { content: name.trim() } }] },
-        'Status 1': { status: { name: 'Not started' } },
+        'Status': { status: { name: 'Not started' } },
       };
 
       if (dueDate) {
@@ -144,14 +145,14 @@ module.exports = async (req, res) => {
       const { id } = req.query;
       if (!id) return res.status(400).json({ error: 'Task id is required' });
 
-      // Use client's local date for Date Completed so it records the right day
+      // Use client's local date so Date Completed records the right calendar day
       const today = req.query.clientDate || new Date().toISOString().split('T')[0];
 
       const page = await fetchNotion(`/pages/${id}`, {
         method: 'PATCH',
         body: JSON.stringify({
           properties: {
-            'Status 1': { status: { name: 'Done' } },
+            'Status': { status: { name: 'Done' } },
             'Date Completed': { date: { start: today } },
           },
         }),
