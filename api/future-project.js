@@ -46,10 +46,7 @@ module.exports = async (req, res) => {
   if (!process.env.NOTION_DATABASE_ID) {
     return res.status(500).json({ success: false, error: 'NOTION_DATABASE_ID not set' });
   }
-  const FUTURE_PROJECTS_DB_ID = process.env.NOTION_FUTURE_PROJECTS_DB_ID;
-  if (!FUTURE_PROJECTS_DB_ID) {
-    return res.status(500).json({ success: false, error: 'NOTION_FUTURE_PROJECTS_DB_ID not set' });
-  }
+  const FUTURE_PROJECTS_DB_ID = process.env.NOTION_FUTURE_PROJECTS_DB_ID || '77e3d9c04649418198ec557854ebecd3';
 
   const {
     taskId, taskName, projectName, spire, notes, taskUrl, clientDate,
@@ -114,7 +111,7 @@ module.exports = async (req, res) => {
 
     return res.status(200).json({ success: true, futureProjectUrl: fpPage.url });
   } catch (err) {
-    console.error('future-project API error:', err);
+    console.error('FP error details:', err?.code, err?.status, JSON.stringify(err?.body || err?.message || err));
     return res.status(200).json({ success: false, error: err.message || 'Internal server error' });
   }
 };
