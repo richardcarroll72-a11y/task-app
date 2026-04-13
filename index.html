@@ -649,6 +649,13 @@ const $ = id => document.getElementById(id);
 // Use local date (not UTC) so comparisons are correct regardless of timezone
 const _now = new Date();
 const today = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}-${String(_now.getDate()).padStart(2,'0')}`;
+// End of today in the local timezone as an ISO datetime — used in the Notion filter so that
+// tasks due tonight (e.g. 9 PM MDT = April 14 UTC) are not excluded by Notion's UTC comparison.
+const _tzMin = _now.getTimezoneOffset(); // positive = west of UTC (e.g. 360 for MDT = UTC-6)
+const _tzSign = _tzMin <= 0 ? '+' : '-';
+const _tzH = String(Math.floor(Math.abs(_tzMin) / 60)).padStart(2, '0');
+const _tzM = String(Math.abs(_tzMin) % 60).padStart(2, '0');
+const clientEndOfDay = `${today}T23:59:59${_tzSign}${_tzH}:${_tzM}`;
 
 // ── Date helpers ─────────────────────────────────────────────────────────────
 function hasTime(dateStr) {
@@ -746,7 +753,7 @@ async function loadTasks() {
   hideError();
 
   try {
-    const res = await fetch(`/api/tasks?clientDate=${today}`);
+    const res = await fetch(`/api/tasks?clientDate=${today}&clientEndOfDay=${encodeURIComponent(clientEndOfDay)}`);
     if (!res.ok) throw new Error(`Server error ${res.status}`);
     const data = await res.json();
 

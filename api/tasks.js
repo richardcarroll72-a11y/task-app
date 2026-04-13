@@ -68,6 +68,9 @@ module.exports = async (req, res) => {
       // so "today" reflects the user's timezone, not Vercel's UTC clock.
       // Without this, tasks due today in MDT (UTC-6) appear as "overdue" after 6 pm.
       const today = req.query.clientDate || new Date().toISOString().split('T')[0];
+      // Use the client's end-of-day datetime (with local timezone offset) so Notion's UTC
+      // comparison includes tasks due tonight (e.g. 9 PM MDT = next-day UTC).
+      const endOfDay = req.query.clientEndOfDay || today;
 
       const data = await fetchNotion(`/databases/${DATABASE_ID}/query`, {
         method: 'POST',
@@ -80,7 +83,7 @@ module.exports = async (req, res) => {
               },
               {
                 property: 'Due Date',
-                date: { on_or_before: today },
+                date: { on_or_before: endOfDay },
               },
             ],
           },
