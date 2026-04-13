@@ -673,13 +673,15 @@ function parseNotionDate(dateStr) {
 
 function formatDate(dateStr) {
   if (!dateStr) return null;
-  const dateOnly = dateOnlyPart(dateStr);
   const d = parseNotionDate(dateStr);
   if (!d || isNaN(d.getTime())) return null;
 
   const now = new Date();
   now.setHours(0, 0, 0, 0);
-  const diff = Math.round((new Date(dateOnly + 'T00:00:00') - now) / 86400000);
+  // Use local midnight (consistent with localDateStr) so "Today/Yesterday/Tomorrow"
+  // labels match the bucket the task lands in, not the raw UTC date portion.
+  const localMidnight = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diff = Math.round((localMidnight - now) / 86400000);
 
   const timeStr = hasTime(dateStr)
     ? d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
@@ -836,8 +838,8 @@ function renderTasks() {
 
 function taskCard(task, isLater = false) {
   const dateLabel = formatDate(task.dueDate);
-  const isOverdue = task.dueDate && dateOnlyPart(task.dueDate) < today;
-  const dateClass = isOverdue ? 'overdue' : (dateOnlyPart(task.dueDate) === today ? 'today' : '');
+  const isOverdue = task.dueDate && localDateStr(task.dueDate) < today;
+  const dateClass = isOverdue ? 'overdue' : (localDateStr(task.dueDate) === today ? 'today' : '');
 
   const projectTags = (task.project || [])
     .map(p => `<span class="tag">${p}</span>`)
@@ -903,8 +905,8 @@ async function markComplete(id, btn) {
 
     // Remove from local state and re-render
     tasks = tasks.filter(t => t.id !== id);
-    const todayCount = tasks.filter(t => dateOnlyPart(t.dueDate) === today).length;
-    const overdueCount = tasks.filter(t => t.dueDate && dateOnlyPart(t.dueDate) < today).length;
+    const todayCount = tasks.filter(t => localDateStr(t.dueDate) === today).length;
+    const overdueCount = tasks.filter(t => t.dueDate && localDateStr(t.dueDate) < today).length;
     $('statToday').textContent = todayCount;
     $('statOverdue').textContent = overdueCount;
     renderTasks();
@@ -972,10 +974,10 @@ $('addForm').addEventListener('submit', async e => {
     closeModal();
 
     // Only add to local view if the task is due today or overdue
-    if (newTask.dueDate && dateOnlyPart(newTask.dueDate) <= today) {
+    if (newTask.dueDate && localDateStr(newTask.dueDate) <= today) {
       tasks = [newTask, ...tasks];
-      const todayCount = tasks.filter(t => dateOnlyPart(t.dueDate) === today).length;
-      const overdueCount = tasks.filter(t => t.dueDate && dateOnlyPart(t.dueDate) < today).length;
+      const todayCount = tasks.filter(t => localDateStr(t.dueDate) === today).length;
+      const overdueCount = tasks.filter(t => t.dueDate && localDateStr(t.dueDate) < today).length;
       $('statToday').textContent = todayCount;
       $('statOverdue').textContent = overdueCount;
       renderTasks();
@@ -1138,8 +1140,8 @@ $('fpSubmitBtn').addEventListener('click', async () => {
 
     if (data.success) {
       tasks = tasks.filter(t => t.id !== taskId);
-      const todayCount = tasks.filter(t => dateOnlyPart(t.dueDate) === today).length;
-      const overdueCount = tasks.filter(t => t.dueDate && dateOnlyPart(t.dueDate) < today).length;
+      const todayCount = tasks.filter(t => localDateStr(t.dueDate) === today).length;
+      const overdueCount = tasks.filter(t => t.dueDate && localDateStr(t.dueDate) < today).length;
       $('statToday').textContent = todayCount;
       $('statOverdue').textContent = overdueCount;
       renderTasks();

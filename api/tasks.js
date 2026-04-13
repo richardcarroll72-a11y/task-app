@@ -68,6 +68,12 @@ module.exports = async (req, res) => {
       // so "today" reflects the user's timezone, not Vercel's UTC clock.
       // Without this, tasks due today in MDT (UTC-6) appear as "overdue" after 6 pm.
       const today = req.query.clientDate || new Date().toISOString().split('T')[0];
+      // Extend the filter by one calendar day so that MDT evening tasks stored as
+      // UTC next-day (e.g. 8 pm MDT = 2 am UTC April 14) are included in results.
+      // The frontend's localDateStr() will correctly place them in "Later Today".
+      const [ty, tm, td] = today.split('-').map(Number);
+      const nextDayDate = new Date(ty, tm - 1, td + 1);
+      const nextDay = `${nextDayDate.getFullYear()}-${String(nextDayDate.getMonth()+1).padStart(2,'0')}-${String(nextDayDate.getDate()).padStart(2,'0')}`;
 
       const data = await fetchNotion(`/databases/${DATABASE_ID}/query`, {
         method: 'POST',
@@ -80,7 +86,7 @@ module.exports = async (req, res) => {
               },
               {
                 property: 'Due Date',
-                date: { on_or_before: today },
+                date: { on_or_before: nextDay },
               },
             ],
           },
@@ -94,8 +100,13 @@ module.exports = async (req, res) => {
 
       const tasks = (data.results || []).map(page => mapPage(page, today));
 
-      // Separate today vs overdue for stats (use date-only part to handle datetime strings)
-      const todayTasks = tasks.filter(t => t.dueDate && t.dueDate.split('T')[0] === today);
+      // Separate today vs overdue for stats.
+      // Include nextDay raw UTC dates in "today" since MDT evening tasks are stored as UTC next-day.
+      const todayTasks = tasks.filter(t => {
+        if (!t.dueDate) return false;
+        const raw = t.dueDate.split('T')[0];
+        return raw === today || raw === nextDay;
+      });
       const overdueTasks = tasks.filter(t => t.dueDate && t.dueDate.split('T')[0] < today);
 
       return res.status(200).json({
