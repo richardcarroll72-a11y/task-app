@@ -702,14 +702,39 @@ function localDateStr(dateStr) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
-function isDueLaterToday(task) {
-  if (!task.dueDate) return false;
-  if (localDateStr(task.dueDate) !== today) return false;
-  // parseNotionDate returns 7am for date-only tasks, so they fall into
-  // Due Today once it's past 7am. Tasks with an explicit future time
-  // show in Due Later until their scheduled time arrives.
-  const dueTime = parseNotionDate(task.dueDate);
-  return dueTime && dueTime > new Date();
+/**
+ * Returns the bucket for a task based on its Notion due date string.
+ * All comparisons use local time via the JS Date constructor.
+ *
+ * @param {string} dueDateStr - ISO date string from Notion (e.g. "2026-04-13" or "2026-04-13T20:00:00.000-06:00")
+ * @returns {'overdue'|'later-today'|'today'|'tomorrow'|'upcoming'|'no-date'}
+ */
+function getTaskBucket(dueDateStr) {
+  if (!dueDateStr) return 'no-date';
+
+  const now = new Date();
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrowMidnight = new Date(todayMidnight.getTime() + 86400000);
+  const dayAfterMidnight = new Date(tomorrowMidnight.getTime() + 86400000);
+
+  const isDateOnly = !dueDateStr.includes('T');
+
+  if (isDateOnly) {
+    const [year, month, day] = dueDateStr.split('-').map(Number);
+    const taskDate = new Date(year, month - 1, day);
+
+    if (taskDate < todayMidnight) return 'overdue';
+    if (taskDate.getTime() === todayMidnight.getTime()) return 'today';
+    if (taskDate.getTime() === tomorrowMidnight.getTime()) return 'tomorrow';
+    return 'upcoming';
+  } else {
+    const taskTime = new Date(dueDateStr);
+
+    if (taskTime < now) return 'overdue';
+    if (taskTime < tomorrowMidnight) return 'later-today';
+    if (taskTime < dayAfterMidnight) return 'tomorrow';
+    return 'upcoming';
+  }
 }
 
 function priorityClass(p) {
@@ -784,11 +809,10 @@ function renderTasks() {
   }
 
   console.log('[tasks] raw dueDate values:', tasks.map(t => t.dueDate));
-  const allTodayTasks = tasks.filter(t => localDateStr(t.dueDate) === today);
-  const dueLaterTasks = allTodayTasks.filter(t => isDueLaterToday(t));
-  const todayTasks = allTodayTasks.filter(t => !isDueLaterToday(t));
-  const overdueTasks = tasks.filter(t => t.dueDate && localDateStr(t.dueDate) < today);
-  console.log('[tasks] today:', today, '| allToday:', allTodayTasks.length, '| dueLater:', dueLaterTasks.length, '| overdue:', overdueTasks.length);
+  const overdueTasks = tasks.filter(t => getTaskBucket(t.dueDate) === 'overdue');
+  const dueLaterTasks = tasks.filter(t => getTaskBucket(t.dueDate) === 'later-today');
+  const todayTasks = tasks.filter(t => getTaskBucket(t.dueDate) === 'today');
+  console.log('[tasks] today:', today, '| today:', todayTasks.length, '| dueLater:', dueLaterTasks.length, '| overdue:', overdueTasks.length);
 
   let html = '';
 
@@ -836,8 +860,8 @@ function renderTasks() {
 
 function taskCard(task, isLater = false) {
   const dateLabel = formatDate(task.dueDate);
-  const isOverdue = task.dueDate && localDateStr(task.dueDate) < today;
-  const dateClass = isOverdue ? 'overdue' : (localDateStr(task.dueDate) === today ? 'today' : '');
+  const bucket = getTaskBucket(task.dueDate);
+  const dateClass = bucket === 'overdue' ? 'overdue' : (bucket === 'today' || bucket === 'later-today' ? 'today' : '');
 
   const projectTags = (task.project || [])
     .map(p => `<span class="tag">${p}</span>`)
@@ -903,8 +927,8 @@ async function markComplete(id, btn) {
 
     // Remove from local state and re-render
     tasks = tasks.filter(t => t.id !== id);
-    const todayCount = tasks.filter(t => dateOnlyPart(t.dueDate) === today).length;
-    const overdueCount = tasks.filter(t => t.dueDate && dateOnlyPart(t.dueDate) < today).length;
+    const todayCount = tasks.filter(t => ['today','later-today'].includes(getTaskBucket(t.dueDate))).length;
+    const overdueCount = tasks.filter(t => getTaskBucket(t.dueDate) === 'overdue').length;
     $('statToday').textContent = todayCount;
     $('statOverdue').textContent = overdueCount;
     renderTasks();
@@ -972,10 +996,10 @@ $('addForm').addEventListener('submit', async e => {
     closeModal();
 
     // Only add to local view if the task is due today or overdue
-    if (newTask.dueDate && dateOnlyPart(newTask.dueDate) <= today) {
+    if (['overdue','today','later-today'].includes(getTaskBucket(newTask.dueDate))) {
       tasks = [newTask, ...tasks];
-      const todayCount = tasks.filter(t => dateOnlyPart(t.dueDate) === today).length;
-      const overdueCount = tasks.filter(t => t.dueDate && dateOnlyPart(t.dueDate) < today).length;
+      const todayCount = tasks.filter(t => ['today','later-today'].includes(getTaskBucket(t.dueDate))).length;
+      const overdueCount = tasks.filter(t => getTaskBucket(t.dueDate) === 'overdue').length;
       $('statToday').textContent = todayCount;
       $('statOverdue').textContent = overdueCount;
       renderTasks();
@@ -1138,8 +1162,8 @@ $('fpSubmitBtn').addEventListener('click', async () => {
 
     if (data.success) {
       tasks = tasks.filter(t => t.id !== taskId);
-      const todayCount = tasks.filter(t => dateOnlyPart(t.dueDate) === today).length;
-      const overdueCount = tasks.filter(t => t.dueDate && dateOnlyPart(t.dueDate) < today).length;
+      const todayCount = tasks.filter(t => ['today','later-today'].includes(getTaskBucket(t.dueDate))).length;
+      const overdueCount = tasks.filter(t => getTaskBucket(t.dueDate) === 'overdue').length;
       $('statToday').textContent = todayCount;
       $('statOverdue').textContent = overdueCount;
       renderTasks();
