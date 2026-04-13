@@ -836,8 +836,8 @@ function renderTasks() {
 
 function taskCard(task, isLater = false) {
   const dateLabel = formatDate(task.dueDate);
-  const isOverdue = task.dueDate && dateOnlyPart(task.dueDate) < today;
-  const dateClass = isOverdue ? 'overdue' : (dateOnlyPart(task.dueDate) === today ? 'today' : '');
+  const isOverdue = task.dueDate && localDateStr(task.dueDate) < today;
+  const dateClass = isOverdue ? 'overdue' : (localDateStr(task.dueDate) === today ? 'today' : '');
 
   const projectTags = (task.project || [])
     .map(p => `<span class="tag">${p}</span>`)
