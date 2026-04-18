@@ -107,6 +107,44 @@
     /* ── Main content ── */
     .main { padding: 16px 16px 0; max-width: 640px; margin: 0 auto; }
 
+    /* ── SPIRE balance bar ── */
+    .spire-balance {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      margin-bottom: 14px;
+      box-shadow: var(--shadow);
+    }
+    .spire-balance-label {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 7px;
+    }
+    .spire-balance-track {
+      display: flex;
+      gap: 3px;
+      height: 34px;
+    }
+    .spire-seg {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border-radius: 5px;
+      font-weight: 800;
+      line-height: 1.1;
+      gap: 1px;
+      overflow: hidden;
+      min-width: 0;
+    }
+    .spire-seg-letter { font-size: 0.6rem; }
+    .spire-seg-count  { font-size: 0.68rem; }
+    .spire-seg-zero   { width: 6px; flex: none !important; background: #e5e7eb; border-radius: 3px; }
+
     /* ── Section label ── */
     .section-label {
       font-size: 0.72rem;
@@ -593,6 +631,7 @@
     </div>`).join('')}
   </div>
 
+  <div id="spireBar" style="display:none"></div>
   <div id="taskList" style="display:none"></div>
 </main>
 
@@ -822,9 +861,45 @@ async function loadTasks() {
     console.error(err);
   } finally {
     $('loadingState').style.display = 'none';
+    $('spireBar').style.display = 'block';
     $('taskList').style.display = 'block';
     btn.classList.remove('spinning');
   }
+}
+
+// ── SPIRE balance bar ─────────────────────────────────────────────────────────
+const SPIRE_DIMS = ['S', 'P', 'I', 'R', 'E'];
+const SPIRE_COLORS = {
+  S: { bg: '#ede9fe', fg: '#6d28d9' },
+  P: { bg: '#dcfce7', fg: '#15803d' },
+  I: { bg: '#dbeafe', fg: '#1d4ed8' },
+  R: { bg: '#fef3c7', fg: '#b45309' },
+  E: { bg: '#fce7f3', fg: '#be185d' },
+};
+
+function renderSpireBar(todayTasks) {
+  const bar = $('spireBar');
+  const counts = Object.fromEntries(SPIRE_DIMS.map(d => [d, 0]));
+  todayTasks.forEach(t => (t.spire || []).forEach(d => { if (d in counts) counts[d]++; }));
+
+  const total = SPIRE_DIMS.reduce((s, d) => s + counts[d], 0);
+  if (total === 0) { bar.innerHTML = ''; return; }
+
+  const segs = SPIRE_DIMS.map(d => {
+    const n = counts[d];
+    if (n === 0) return `<div class="spire-seg spire-seg-zero" title="${d}: 0"></div>`;
+    const { bg, fg } = SPIRE_COLORS[d];
+    return `<div class="spire-seg" style="flex:${n};background:${bg};color:${fg}" title="${d}: ${n}">
+      <span class="spire-seg-letter">${d}</span>
+      <span class="spire-seg-count">${n}</span>
+    </div>`;
+  }).join('');
+
+  bar.innerHTML = `
+    <div class="spire-balance">
+      <div class="spire-balance-label">Today's SPIRE balance</div>
+      <div class="spire-balance-track">${segs}</div>
+    </div>`;
 }
 
 // ── Render tasks ─────────────────────────────────────────────────────────────
@@ -832,6 +907,7 @@ function renderTasks() {
   const list = $('taskList');
 
   if (tasks.length === 0) {
+    renderSpireBar([]);
     list.innerHTML = `
       <div class="empty-state">
         <div class="emoji">🎉</div>
@@ -844,6 +920,7 @@ function renderTasks() {
   const overdueTasks = tasks.filter(t => getTaskBucket(t.dueDate) === 'overdue');
   const dueLaterTasks = tasks.filter(t => getTaskBucket(t.dueDate) === 'later-today');
   const todayTasks = tasks.filter(t => getTaskBucket(t.dueDate) === 'today');
+  renderSpireBar(todayTasks);
   console.log('[tasks] today:', today, '| today:', todayTasks.length, '| dueLater:', dueLaterTasks.length, '| overdue:', overdueTasks.length);
 
   let html = '';
