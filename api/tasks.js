@@ -145,8 +145,27 @@ module.exports = async (req, res) => {
 
     // ─── PATCH /api/tasks?id=ID ───────────────────────────────────────────────
     if (req.method === 'PATCH') {
-      const { id } = req.query;
+      const { id, action } = req.query;
       if (!id) return res.status(400).json({ error: 'Task id is required' });
+
+      // ── Snooze: push Due Date to tomorrow, leave Status unchanged ──
+      if (action === 'snooze') {
+        const clientDate = req.query.clientDate || new Date().toISOString().split('T')[0];
+        const [y, m, d] = clientDate.split('-').map(Number);
+        const tomorrow = new Date(y, m - 1, d + 1);
+        const newDueDate = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
+
+        await fetchNotion(`/pages/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            properties: {
+              'Due Date': { date: { start: newDueDate } },
+            },
+          }),
+        });
+
+        return res.status(200).json({ success: true, newDueDate });
+      }
 
       // Use client's local date so Date Completed records the right calendar day
       const today = req.query.clientDate || new Date().toISOString().split('T')[0];

@@ -504,6 +504,25 @@
     }
     .article-link:hover { background: #c7d2fe; border-color: var(--primary); }
 
+    /* ── Snooze button ── */
+    .snooze-btn {
+      height: 24px;
+      padding: 0 8px;
+      border-radius: 12px;
+      border: 1.5px solid var(--border);
+      background: none;
+      cursor: pointer;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--muted);
+      flex-shrink: 0;
+      white-space: nowrap;
+      margin-top: 1px;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .snooze-btn:hover { border-color: #9ca3af; background: #f9fafb; }
+    .snooze-btn:active { opacity: 0.7; }
+
     /* ── Park (Future Project) button ── */
     .park-btn {
       width: 24px;
@@ -652,7 +671,7 @@
     </div>
     <div>
       <button class="btn-refresh" id="refreshBtn" title="Refresh" aria-label="Refresh tasks">↻</button>
-      <div class="app-version">v1.8.0</div>
+      <div class="app-version">v1.9.0</div>
     </div>
   </div>
   <div class="stats-bar">
@@ -994,7 +1013,7 @@ function renderTasks() {
 
   if (overdueTasks.length > 0) {
     html += `<div class="section-label">🔥 Overdue (${overdueTasks.length})</div>`;
-    html += overdueTasks.map(t => taskCard(t, false)).join('');
+    html += overdueTasks.map(t => taskCard(t, false, true)).join('');
   }
 
   if (dueLaterTasks.length > 0) {
@@ -1026,6 +1045,14 @@ function renderTasks() {
     });
   });
 
+  // Attach snooze listeners
+  list.querySelectorAll('.snooze-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      snoozeTask(btn.dataset.id, btn);
+    });
+  });
+
   // Attach park listeners
   list.querySelectorAll('.park-btn').forEach(btn => {
     btn.addEventListener('click', e => {
@@ -1039,7 +1066,7 @@ function renderTasks() {
   });
 }
 
-function taskCard(task, isLater = false) {
+function taskCard(task, isLater = false, isOverdue = false) {
   const dateLabel = formatDate(task.dueDate);
   const bucket = getTaskBucket(task.dueDate);
   const dateClass = bucket === 'overdue' ? 'overdue' : (bucket === 'today' || bucket === 'later-today' ? 'today' : '');
@@ -1069,9 +1096,14 @@ function taskCard(task, isLater = false) {
     secondaryUrl ? `<a class="article-link" href="${escHtml(secondaryUrl)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">🔗 Notes</a>` : '',
   ].join('');
 
+  const snoozeBtn = isOverdue
+    ? `<button class="snooze-btn" data-id="${task.id}" title="Snooze to tomorrow" aria-label="Snooze '${escHtml(task.name)}' to tomorrow">→ Tomorrow</button>`
+    : '';
+
   return `
     <div class="task-card${isLater ? ' later' : ''}" data-id="${task.id}">
       <button class="check-btn" data-id="${task.id}" title="Mark complete" aria-label="Mark '${task.name}' complete"></button>
+      ${snoozeBtn}
       <div class="task-body">
         <div class="task-name">${escHtml(task.name)}</div>
         <div class="task-meta">
@@ -1172,6 +1204,27 @@ async function markComplete(id, btn) {
 }
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Snooze task ──────────────────────────────────────────────────────────────
+async function snoozeTask(id, btn) {
+  if (btn.disabled) return;
+  btn.disabled = true;
+
+  // Optimistic: remove from local state and re-render immediately
+  tasks = tasks.filter(t => t.id !== id);
+  const overdueCount = tasks.filter(t => getTaskBucket(t.dueDate) === 'overdue').length;
+  $('statOverdue').textContent = overdueCount;
+  renderTasks();
+  showToast('Snoozed to tomorrow', 2000);
+
+  try {
+    const res = await fetch(`/api/tasks?id=${encodeURIComponent(id)}&action=snooze&clientDate=${today}`, { method: 'PATCH' });
+    if (!res.ok) throw new Error(`Error ${res.status}`);
+  } catch (err) {
+    console.error('Snooze error:', err);
+    loadTasks();
+  }
+}
 
 // ── Add task modal ───────────────────────────────────────────────────────────
 $('addBtn').addEventListener('click', () => {
@@ -1420,12 +1473,12 @@ $('fpSubmitBtn').addEventListener('click', async () => {
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 let _toastTimer = null;
-function showToast(msg) {
+function showToast(msg, ms = 3000) {
   const el = $('toast');
   el.textContent = msg;
   el.classList.add('show');
   clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), ms);
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────
