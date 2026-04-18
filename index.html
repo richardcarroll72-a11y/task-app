@@ -190,6 +190,30 @@
     .badge-low { background: var(--green-light); color: #065f46; }
     .badge-none { background: var(--bg); color: var(--muted); }
 
+    /* SPIRE dimension badges */
+    .spire-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      padding: 1px 0;
+    }
+    .spire-dim {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      font-size: 0.6rem;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .spire-S { background: #ede9fe; color: #6d28d9; }
+    .spire-P { background: #dcfce7; color: #15803d; }
+    .spire-I { background: #dbeafe; color: #1d4ed8; }
+    .spire-R { background: #fef3c7; color: #b45309; }
+    .spire-E { background: #fce7f3; color: #be185d; }
+
     /* Project tag */
     .tag {
       display: inline-flex;
@@ -875,6 +899,10 @@ function taskCard(task, isLater = false) {
     ? `<span class="badge ${priorityClass(task.priority)}">${priorityIcon(task.priority)} ${task.priority}</span>`
     : '';
 
+  const spireBadge = (task.spire && task.spire.length > 0)
+    ? `<span class="spire-badge">${task.spire.map(d => `<span class="spire-dim spire-${d}">${d}</span>`).join('')}</span>`
+    : '';
+
   // Use dedicated URL property first; fall back to first URL found in Notes
   const urlFromNotes = (task.notes && task.notes.match(/https?:\/\/[^\s\n]+/)?.[0]) || null;
   const primaryUrl = task.articleUrl || urlFromNotes;
@@ -891,6 +919,7 @@ function taskCard(task, isLater = false) {
         <div class="task-name">${escHtml(task.name)}</div>
         <div class="task-meta">
           ${priorityBadge}
+          ${spireBadge}
           ${projectTags}
           ${dueBadge}
           ${linkBadge}
