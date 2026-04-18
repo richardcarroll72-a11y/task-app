@@ -8,12 +8,20 @@
     "api/future-project.js": {
       "memory": 128,
       "maxDuration": 15
+    },
+    "api/projects.js": {
+      "memory": 128,
+      "maxDuration": 15
     }
   },
   "routes": [
     {
       "src": "/api/tasks",
       "dest": "/api/tasks.js"
+    },
+    {
+      "src": "/api/projects",
+      "dest": "/api/projects.js"
     },
     {
       "src": "/api/future-project",

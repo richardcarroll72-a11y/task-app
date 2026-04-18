@@ -650,6 +650,19 @@
     }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+    /* ── Project sections ── */
+    .project-section { margin-bottom: 16px; border-radius: 10px; overflow: hidden; background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow); }
+    .project-header { display: flex; align-items: center; gap: 8px; padding: 12px 14px; cursor: pointer; user-select: none; }
+    .project-header:hover { background: rgba(0,0,0,0.02); }
+    .project-name { flex: 1; font-weight: 600; font-size: 15px; }
+    .project-progress { display: flex; align-items: center; gap: 6px; }
+    .project-progress-bar { width: 60px; height: 6px; background: rgba(0,0,0,0.08); border-radius: 3px; overflow: hidden; }
+    .project-progress-fill { height: 100%; background: #4ade80; border-radius: 3px; transition: width 0.3s ease; }
+    .project-progress-label { font-size: 12px; color: #888; white-space: nowrap; }
+    .project-chevron { font-size: 12px; color: #888; }
+    .project-tasks { padding: 0 6px 6px; }
+    .project-tasks.collapsed { display: none; }
+
     /* ── Desktop: center modals ── */
     @media (min-width: 641px) {
       #fpModalOverlay { align-items: center; }
@@ -671,7 +684,7 @@
     </div>
     <div>
       <button class="btn-refresh" id="refreshBtn" title="Refresh" aria-label="Refresh tasks">↻</button>
-      <div class="app-version">v1.9.0</div>
+      <div class="app-version">v2.0.0</div>
     </div>
   </div>
   <div class="stats-bar">
@@ -905,6 +918,7 @@ $('taskDue').value = today;
 
 // ── State ────────────────────────────────────────────────────────────────────
 let tasks = [];
+let projectMap = {}; // keyed by Notion page ID
 
 // ── Fetch tasks ──────────────────────────────────────────────────────────────
 async function loadTasks() {
@@ -913,14 +927,24 @@ async function loadTasks() {
   hideError();
 
   try {
-    const res = await fetch(`/api/tasks?clientDate=${today}`);
-    if (!res.ok) throw new Error(`Server error ${res.status}`);
-    const data = await res.json();
+    const [tasksRes, projectsRes] = await Promise.all([
+      fetch(`/api/tasks?clientDate=${today}`),
+      fetch('/api/projects').catch(() => null),
+    ]);
+
+    if (!tasksRes.ok) throw new Error(`Server error ${tasksRes.status}`);
+    const data = await tasksRes.json();
 
     if (data.offline) {
       $('offlineBanner').classList.add('visible');
     } else {
       $('offlineBanner').classList.remove('visible');
+    }
+
+    if (projectsRes?.ok) {
+      const projectsData = await projectsRes.json();
+      projectMap = {};
+      (Array.isArray(projectsData) ? projectsData : []).forEach(p => { projectMap[p.id] = p; });
     }
 
     tasks = data.tasks || [];
@@ -996,15 +1020,30 @@ function renderTasks() {
   const relationshipTasks = tasks.filter(isRelationship);
   const regularTasks = tasks.filter(t => !isArticle(t) && !isRelationship(t));
 
-  const allTodayTasks = tasks.filter(t => getTaskBucket(t.dueDate) === 'today');
   renderSpireBar(tasks);
 
-  const overdueTasks = regularTasks.filter(t => getTaskBucket(t.dueDate) === 'overdue');
-  const dueLaterTasks = regularTasks.filter(t => getTaskBucket(t.dueDate) === 'later-today');
-  const todayTasks = allTodayTasks.filter(t => !isArticle(t) && !isRelationship(t));
-  console.log('[tasks] today:', today, '| today:', todayTasks.length, '| dueLater:', dueLaterTasks.length, '| overdue:', overdueTasks.length, '| articles:', articleTasks.length, '| relationships:', relationshipTasks.length);
+  // Split: tasks linked to a Notion project vs standalone
+  const projectLinkedTasks = regularTasks.filter(t => t.project);
+  const ungroupedTasks = regularTasks.filter(t => !t.project);
+
+  // Group project tasks by project ID, preserving insertion order
+  const tasksByProject = {};
+  projectLinkedTasks.forEach(t => {
+    if (!tasksByProject[t.project]) tasksByProject[t.project] = [];
+    tasksByProject[t.project].push(t);
+  });
+
+  const overdueTasks = ungroupedTasks.filter(t => getTaskBucket(t.dueDate) === 'overdue');
+  const dueLaterTasks = ungroupedTasks.filter(t => getTaskBucket(t.dueDate) === 'later-today');
+  const todayTasks = ungroupedTasks.filter(t => getTaskBucket(t.dueDate) === 'today');
+  console.log('[tasks] today:', today, '| ungrouped today:', todayTasks.length, '| dueLater:', dueLaterTasks.length, '| overdue:', overdueTasks.length, '| articles:', articleTasks.length, '| relationships:', relationshipTasks.length, '| project groups:', Object.keys(tasksByProject).length);
 
   let html = '';
+
+  // Project sections first
+  for (const [projectId, ptasks] of Object.entries(tasksByProject)) {
+    html += projectSection(projectId, ptasks);
+  }
 
   if (todayTasks.length > 0) {
     html += `<div class="section-label">📅 Due Today (${todayTasks.length})</div>`;
@@ -1071,9 +1110,8 @@ function taskCard(task, isLater = false, isOverdue = false) {
   const bucket = getTaskBucket(task.dueDate);
   const dateClass = bucket === 'overdue' ? 'overdue' : (bucket === 'today' || bucket === 'later-today' ? 'today' : '');
 
-  const projectTags = (task.project || [])
-    .map(p => `<span class="tag">${p}</span>`)
-    .join('');
+  // project is now a relation ID string — context comes from the section header, no inline tag needed
+  const projectTags = '';
 
   const dueBadge = dateLabel
     ? `<span class="due-date ${dateClass}">📅 ${dateLabel}</span>`
@@ -1114,7 +1152,7 @@ function taskCard(task, isLater = false, isOverdue = false) {
         </div>
       </div>
       <div class="card-right">
-        <button class="park-btn" data-id="${task.id}" data-name="${escHtml(task.name)}" data-url="${escHtml(task.url || '')}" data-notes="${escHtml(task.notes || '')}" data-priority="${escHtml(task.priority || '')}" data-project="${escHtml(JSON.stringify(task.project || []))}" data-due-date="${escHtml(task.dueDate || '')}" data-article-url="${escHtml(task.articleUrl || '')}" title="Park as Future Project" aria-label="Park '${task.name}' as Future Project">🚀</button>
+        <button class="park-btn" data-id="${task.id}" data-name="${escHtml(task.name)}" data-url="${escHtml(task.url || '')}" data-notes="${escHtml(task.notes || '')}" data-priority="${escHtml(task.priority || '')}" data-project="[]" data-due-date="${escHtml(task.dueDate || '')}" data-article-url="${escHtml(task.articleUrl || '')}" title="Park as Future Project" aria-label="Park '${task.name}' as Future Project">🚀</button>
         ${spireBadge}
       </div>
     </div>`;
@@ -1162,6 +1200,44 @@ function relationshipCard(task) {
       </div>
     </div>`;
 }
+
+function projectSection(projectId, ptasks) {
+  const project = projectMap[projectId];
+  const name = project?.name || 'Project';
+  const spire = project?.spire || null;
+  const total = ptasks.length;
+
+  const spireBadge = spire
+    ? `<span class="spire-dim spire-${escHtml(spire)}">${escHtml(spire)}</span>`
+    : '';
+
+  return `
+    <div class="project-section" data-project-id="${escHtml(projectId)}">
+      <div class="project-header" onclick="toggleProject('${projectId}')">
+        ${spireBadge}
+        <span class="project-name">${escHtml(name)}</span>
+        <div class="project-progress">
+          <div class="project-progress-bar">
+            <div class="project-progress-fill" style="width:0%"></div>
+          </div>
+          <span class="project-progress-label">${total}</span>
+        </div>
+        <span class="project-chevron">▾</span>
+      </div>
+      <div class="project-tasks" id="project-tasks-${projectId}">
+        ${ptasks.map(t => taskCard(t, false)).join('')}
+      </div>
+    </div>`;
+}
+
+function toggleProject(id) {
+  const el = document.getElementById('project-tasks-' + id);
+  if (!el) return;
+  el.classList.toggle('collapsed');
+  el.previousElementSibling.querySelector('.project-chevron').textContent =
+    el.classList.contains('collapsed') ? '▸' : '▾';
+}
+
 
 function escHtml(str) {
   return String(str)
