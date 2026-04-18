@@ -190,12 +190,19 @@
     .badge-low { background: var(--green-light); color: #065f46; }
     .badge-none { background: var(--bg); color: var(--muted); }
 
-    /* SPIRE dimension badges */
+    /* SPIRE dimension badges — right-side column */
+    .card-right {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      flex-shrink: 0;
+    }
     .spire-badge {
-      display: inline-flex;
+      display: flex;
+      flex-direction: column;
       align-items: center;
       gap: 2px;
-      padding: 1px 0;
     }
     .spire-dim {
       display: inline-flex;
@@ -464,6 +471,7 @@
       border-radius: 50%;
       border: 2px solid var(--border);
       background: none;
+      margin-top: 0;
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -919,13 +927,15 @@ function taskCard(task, isLater = false) {
         <div class="task-name">${escHtml(task.name)}</div>
         <div class="task-meta">
           ${priorityBadge}
-          ${spireBadge}
           ${projectTags}
           ${dueBadge}
           ${linkBadge}
         </div>
       </div>
-      <button class="park-btn" data-id="${task.id}" data-name="${escHtml(task.name)}" data-url="${escHtml(task.url || '')}" data-notes="${escHtml(task.notes || '')}" data-priority="${escHtml(task.priority || '')}" data-project="${escHtml(JSON.stringify(task.project || []))}" data-due-date="${escHtml(task.dueDate || '')}" data-article-url="${escHtml(task.articleUrl || '')}" title="Park as Future Project" aria-label="Park '${task.name}' as Future Project">🚀</button>
+      <div class="card-right">
+        <button class="park-btn" data-id="${task.id}" data-name="${escHtml(task.name)}" data-url="${escHtml(task.url || '')}" data-notes="${escHtml(task.notes || '')}" data-priority="${escHtml(task.priority || '')}" data-project="${escHtml(JSON.stringify(task.project || []))}" data-due-date="${escHtml(task.dueDate || '')}" data-article-url="${escHtml(task.articleUrl || '')}" title="Park as Future Project" aria-label="Park '${task.name}' as Future Project">🚀</button>
+        ${spireBadge}
+      </div>
     </div>`;
 }
 
