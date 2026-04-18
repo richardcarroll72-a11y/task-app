@@ -42,7 +42,9 @@ function mapPage(page, today) {
     dueDate: dueStart,
     isOverdue,
     priority: props['Priority']?.select?.name || '',
-    spire: (props['SPIRE']?.multi_select || []).map(s => s.name),
+    spire: (props['SPIRE']?.multi_select || [])
+      .map(s => s.name.trim().charAt(0).toUpperCase())
+      .filter(c => ['S','P','I','R','E'].includes(c)),
     project: (props['Project']?.multi_select || []).map(p => p.name),
     notes: props['Notes']?.rich_text?.map(t => t.plain_text).join('') || '',
     articleUrl: props['URL']?.url || null,

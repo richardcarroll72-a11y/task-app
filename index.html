@@ -127,7 +127,9 @@
     .spire-balance-track {
       display: flex;
       gap: 3px;
-      height: 34px;
+      height: 36px;
+      width: 100%;
+      align-items: stretch;
     }
     .spire-seg {
       display: flex;
@@ -143,7 +145,7 @@
     }
     .spire-seg-letter { font-size: 0.6rem; }
     .spire-seg-count  { font-size: 0.68rem; }
-    .spire-seg-zero   { width: 6px; flex: none !important; background: #e5e7eb; border-radius: 3px; }
+    .spire-seg-zero   { background: #e5e7eb; border-radius: 3px; align-self: center; height: 20px; }
 
     /* ── Section label ── */
     .section-label {
@@ -918,14 +920,19 @@ const SPIRE_COLORS = {
   E: { bg: '#fce7f3', fg: '#be185d' },
 };
 
-function renderSpireBar(todayTasks) {
+function renderSpireBar(allTasks) {
   const bar = $('spireBar');
   const counts = Object.fromEntries(SPIRE_DIMS.map(d => [d, 0]));
-  todayTasks.forEach(t => (t.spire || []).forEach(d => { if (d in counts) counts[d]++; }));
+  allTasks.forEach(t => (t.spire || []).forEach(d => { if (d in counts) counts[d]++; }));
+  const total = SPIRE_DIMS.reduce((s, d) => s + counts[d], 0);
+  console.log('[spire] tagged:', allTasks.filter(t => t.spire && t.spire.length > 0).length, '/', allTasks.length, '| counts:', counts);
 
   const segs = SPIRE_DIMS.map(d => {
     const n = counts[d];
-    if (n === 0) return `<div class="spire-seg spire-seg-zero" title="${d}: 0"></div>`;
+    if (n === 0) {
+      const stubFlex = total === 0 ? 'flex:1' : 'flex:0 0 8px';
+      return `<div class="spire-seg spire-seg-zero" style="${stubFlex}" title="${d}: 0"></div>`;
+    }
     const { bg, fg } = SPIRE_COLORS[d];
     return `<div class="spire-seg" style="flex:${n};background:${bg};color:${fg}" title="${d}: ${n}">
       <span class="spire-seg-letter">${d}</span>
