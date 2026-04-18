@@ -938,7 +938,7 @@ function renderSpireBar(todayTasks) {
 
   bar.innerHTML = `
     <div class="spire-balance">
-      <div class="spire-balance-label">Today's SPIRE balance</div>
+      <div class="spire-balance-label">Active SPIRE balance</div>
       <div class="spire-balance-track">${segs}</div>
     </div>`;
 }
@@ -963,7 +963,7 @@ function renderTasks() {
   const regularTasks = tasks.filter(t => !isArticle(t));
 
   const allTodayTasks = tasks.filter(t => getTaskBucket(t.dueDate) === 'today');
-  renderSpireBar(allTodayTasks);
+  renderSpireBar(tasks);
 
   const overdueTasks = regularTasks.filter(t => getTaskBucket(t.dueDate) === 'overdue');
   const dueLaterTasks = regularTasks.filter(t => getTaskBucket(t.dueDate) === 'later-today');
