@@ -923,9 +923,6 @@ function renderSpireBar(todayTasks) {
   const counts = Object.fromEntries(SPIRE_DIMS.map(d => [d, 0]));
   todayTasks.forEach(t => (t.spire || []).forEach(d => { if (d in counts) counts[d]++; }));
 
-  const total = SPIRE_DIMS.reduce((s, d) => s + counts[d], 0);
-  if (total === 0) { bar.innerHTML = ''; return; }
-
   const segs = SPIRE_DIMS.map(d => {
     const n = counts[d];
     if (n === 0) return `<div class="spire-seg spire-seg-zero" title="${d}: 0"></div>`;
