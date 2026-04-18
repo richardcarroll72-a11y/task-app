@@ -668,6 +668,23 @@
       #fpModalOverlay { align-items: center; }
       #fpModalOverlay .modal { border-radius: var(--radius); max-height: 85vh; overflow-y: auto; }
     }
+
+    /* ── Parent task card (has subtasks) ── */
+    .parent-card { display: block; padding: 0; border-left: 3px solid rgba(99,102,241,0.3); cursor: default; }
+    .card-main { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; cursor: pointer; }
+    .card-left { display: flex; align-items: center; flex-shrink: 0; margin-top: 1px; }
+    .card-body { flex: 1; min-width: 0; }
+    .subtask-progress { display: flex; align-items: center; gap: 5px; min-width: 70px; }
+    .subtask-progress-bar { flex: 1; height: 5px; background: rgba(0,0,0,0.1); border-radius: 3px; overflow: hidden; }
+    .subtask-progress-fill { height: 100%; background: #4ade80; border-radius: 3px; transition: width 0.3s ease; }
+    .subtask-progress-label { font-size: 11px; color: #888; white-space: nowrap; }
+    .subtask-list { padding: 0 8px 8px 16px; }
+    .subtask-list.collapsed { display: none; }
+    .subtask-card { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; background: var(--bg); margin-bottom: 4px; }
+    .subtask-name { font-size: 14px; flex: 1; }
+    .subtask-check { width: 26px; height: 26px; border-radius: 50%; border: 2px solid #d1d5db; background: none; color: transparent; cursor: pointer; font-size: 13px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .subtask-check:hover { border-color: #4ade80; color: #4ade80; }
+    .subtask-chevron { font-size: 12px; color: #888; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -684,7 +701,7 @@
     </div>
     <div>
       <button class="btn-refresh" id="refreshBtn" title="Refresh" aria-label="Refresh tasks">↻</button>
-      <div class="app-version">v2.0.0</div>
+      <div class="app-version">v2.1.0</div>
     </div>
   </div>
   <div class="stats-bar">
@@ -1047,17 +1064,17 @@ function renderTasks() {
 
   if (todayTasks.length > 0) {
     html += `<div class="section-label">📅 Due Today (${todayTasks.length})</div>`;
-    html += todayTasks.map(t => taskCard(t, false)).join('');
+    html += todayTasks.map(t => buildCard(t, false)).join('');
   }
 
   if (overdueTasks.length > 0) {
     html += `<div class="section-label">🔥 Overdue (${overdueTasks.length})</div>`;
-    html += overdueTasks.map(t => taskCard(t, false, true)).join('');
+    html += overdueTasks.map(t => buildCard(t, false, true)).join('');
   }
 
   if (dueLaterTasks.length > 0) {
     html += `<div class="section-label">⏰ Due Later (${dueLaterTasks.length})</div>`;
-    html += dueLaterTasks.map(t => taskCard(t, true)).join('');
+    html += dueLaterTasks.map(t => buildCard(t, true)).join('');
   }
 
   if (articleTasks.length > 0) {
@@ -1077,7 +1094,7 @@ function renderTasks() {
   list.innerHTML = html;
 
   // Attach complete listeners
-  list.querySelectorAll('.check-btn').forEach(btn => {
+  list.querySelectorAll('.check-btn:not(.subtask-check)').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
       markComplete(btn.dataset.id, btn);
@@ -1225,7 +1242,7 @@ function projectSection(projectId, ptasks) {
         <span class="project-chevron">▾</span>
       </div>
       <div class="project-tasks" id="project-tasks-${projectId}">
-        ${ptasks.map(t => taskCard(t, false)).join('')}
+        ${ptasks.map(t => buildCard(t, false)).join('')}
       </div>
     </div>`;
 }
@@ -1238,6 +1255,119 @@ function toggleProject(id) {
     el.classList.contains('collapsed') ? '▸' : '▾';
 }
 
+function buildCard(t, isLater = false, isOverdue = false) {
+  return (t.subtaskIds && t.subtaskIds.length > 0)
+    ? parentTaskCard(t)
+    : taskCard(t, isLater, isOverdue);
+}
+
+function parentTaskCard(task) {
+  const total = task.subtasks ? task.subtasks.length : 0;
+  const done = task.subtasks ? task.subtasks.filter(s => s.status === 'Done').length : 0;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+
+  const priorityBadge = task.priority
+    ? `<span class="badge ${priorityClass(task.priority)}">${priorityIcon(task.priority)} ${task.priority}</span>`
+    : '';
+
+  const dateLabel = formatDate(task.dueDate);
+  const bucket = getTaskBucket(task.dueDate);
+  const dateClass = bucket === 'overdue' ? 'overdue' : (bucket === 'today' || bucket === 'later-today' ? 'today' : '');
+  const dueBadge = dateLabel
+    ? `<span class="due-date ${dateClass}">📅 ${dateLabel}</span>`
+    : '';
+
+  const spireBadge = (task.spire && task.spire.length > 0)
+    ? `<span class="spire-badge">${task.spire.map(d => `<span class="spire-dim spire-${d}">${d}</span>`).join('')}</span>`
+    : '';
+
+  const subtaskItems = (task.subtasks || [])
+    .filter(s => s.status !== 'Done')
+    .map(s => subtaskCard(s, task.id))
+    .join('');
+
+  return `
+    <div class="task-card parent-card" data-task-id="${task.id}">
+      <div class="card-main" onclick="toggleSubtasks('${task.id}')">
+        <div class="card-left">
+          <div class="subtask-progress">
+            <div class="subtask-progress-bar">
+              <div class="subtask-progress-fill" id="progress-fill-${task.id}" style="width:${pct}%"></div>
+            </div>
+            <span class="subtask-progress-label" id="progress-label-${task.id}">${done}/${total}</span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="task-name">${escHtml(task.name)}</div>
+          <div class="task-meta">
+            ${priorityBadge}
+            ${dueBadge}
+          </div>
+        </div>
+        <div class="card-right">
+          ${spireBadge}
+          <span class="subtask-chevron" id="chevron-${task.id}">▾</span>
+        </div>
+      </div>
+      <div class="subtask-list" id="subtasks-${task.id}">
+        ${subtaskItems}
+      </div>
+    </div>`;
+}
+
+function subtaskCard(subtask, parentId) {
+  return `
+    <div class="subtask-card" id="subtask-${subtask.id}">
+      <button class="check-btn subtask-check" onclick="completeSubtask('${subtask.id}', '${parentId}')">✓</button>
+      <span class="subtask-name">${escHtml(subtask.name)}</span>
+    </div>`;
+}
+
+function toggleSubtasks(id) {
+  const list = document.getElementById('subtasks-' + id);
+  const chevron = document.getElementById('chevron-' + id);
+  list.classList.toggle('collapsed');
+  chevron.textContent = list.classList.contains('collapsed') ? '▸' : '▾';
+}
+
+async function completeSubtask(subtaskId, parentId) {
+  const card = document.getElementById('subtask-' + subtaskId);
+  if (card) card.style.display = 'none';
+
+  const parentTask = tasks.find(t => t.id === parentId);
+  if (parentTask && parentTask.subtasks) {
+    const subtask = parentTask.subtasks.find(s => s.id === subtaskId);
+    if (subtask) subtask.status = 'Done';
+
+    const newDone = parentTask.subtasks.filter(s => s.status === 'Done').length;
+    const total = parentTask.subtasks.length;
+    const pct = Math.round((newDone / total) * 100);
+
+    const fillEl = document.getElementById('progress-fill-' + parentId);
+    const labelEl = document.getElementById('progress-label-' + parentId);
+    if (fillEl) fillEl.style.width = pct + '%';
+    if (labelEl) labelEl.textContent = newDone + '/' + total;
+
+    if (newDone >= total) {
+      const parentCard = document.querySelector(`.parent-card[data-task-id="${parentId}"]`);
+      if (parentCard) {
+        parentCard.classList.add('completing');
+        await delay(300);
+      }
+      fetch(`/api/tasks?id=${encodeURIComponent(parentId)}&clientDate=${today}`, { method: 'PATCH' })
+        .catch(console.error);
+      tasks = tasks.filter(t => t.id !== parentId);
+      const todayCount = tasks.filter(t => ['today','later-today'].includes(getTaskBucket(t.dueDate))).length;
+      const overdueCount = tasks.filter(t => getTaskBucket(t.dueDate) === 'overdue').length;
+      $('statToday').textContent = todayCount;
+      $('statOverdue').textContent = overdueCount;
+      renderTasks();
+    }
+  }
+
+  fetch(`/api/tasks?id=${encodeURIComponent(subtaskId)}&clientDate=${today}`, { method: 'PATCH' })
+    .catch(console.error);
+}
 
 function escHtml(str) {
   return String(str)

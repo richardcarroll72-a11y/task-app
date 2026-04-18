@@ -49,6 +49,8 @@ function mapPage(page, today) {
     notes: props['Notes']?.rich_text?.map(t => t.plain_text).join('') || '',
     articleUrl: props['URL']?.url || null,
     dateCompleted: props['Date Completed']?.date?.start || null,
+    subtaskIds: (props['Subtasks']?.relation || []).map(r => r.id),
+    parentId: props['Parent Task']?.relation?.[0]?.id || null,
   };
 }
 
@@ -97,16 +99,36 @@ module.exports = async (req, res) => {
 
       const tasks = (data.results || []).map(page => mapPage(page, today));
 
+      // Fetch and attach subtasks for any parent tasks
+      const parentTasks = tasks.filter(t => t.subtaskIds.length > 0);
+      if (parentTasks.length > 0) {
+        const allSubtaskIds = [...new Set(parentTasks.flatMap(t => t.subtaskIds))];
+        const subtaskPages = await Promise.all(
+          allSubtaskIds.map(id => fetchNotion(`/pages/${id}`).catch(() => null))
+        );
+        const subtaskMap = {};
+        subtaskPages.filter(Boolean).forEach(page => {
+          subtaskMap[page.id] = mapPage(page, today);
+        });
+        parentTasks.forEach(task => {
+          task.subtasks = task.subtaskIds.map(id => subtaskMap[id]).filter(Boolean);
+        });
+      }
+
+      // Remove subtasks from top-level if their parent is in the result set
+      const taskIds = new Set(tasks.map(t => t.id));
+      const filteredTasks = tasks.filter(t => !t.parentId || !taskIds.has(t.parentId));
+
       // Separate today vs overdue for stats (use date-only part to handle datetime strings)
-      const todayTasks = tasks.filter(t => t.dueDate && t.dueDate.split('T')[0] === today);
-      const overdueTasks = tasks.filter(t => t.dueDate && t.dueDate.split('T')[0] < today);
+      const todayTasks = filteredTasks.filter(t => t.dueDate && t.dueDate.split('T')[0] === today);
+      const overdueTasks = filteredTasks.filter(t => t.dueDate && t.dueDate.split('T')[0] < today);
 
       return res.status(200).json({
-        tasks,
+        tasks: filteredTasks,
         stats: {
           today: todayTasks.length,
           overdue: overdueTasks.length,
-          total: tasks.length,
+          total: filteredTasks.length,
         },
       });
     }
