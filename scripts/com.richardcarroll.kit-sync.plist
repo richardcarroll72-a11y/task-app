@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.richardcarroll.kit-sync</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/Users/richardcarroll/Documents/task-app/scripts/kit_sync.py</string>
+    </array>
+
+    <!-- Replace YOUR_NOTION_TOKEN_HERE with your actual Notion integration token -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>NOTION_TOKEN</key>
+        <string>YOUR_NOTION_TOKEN_HERE</string>
+    </dict>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/richardcarroll/Documents/task-app</string>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>5</integer>
+        <key>Minute</key>
+        <integer>45</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/richardcarroll/Library/Logs/kit-sync.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/richardcarroll/Library/Logs/kit-sync.log</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>
