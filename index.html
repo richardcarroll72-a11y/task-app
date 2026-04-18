@@ -566,6 +566,15 @@
     }
     .article-open:hover { opacity: 0.82; }
 
+    /* ── Relationship notes ── */
+    .relationship-notes {
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-top: 5px;
+      line-height: 1.4;
+      word-break: break-word;
+    }
+
     /* ── SPIRE picker ── */
     .spire-picker {
       display: flex;
@@ -643,7 +652,7 @@
     </div>
     <div>
       <button class="btn-refresh" id="refreshBtn" title="Refresh" aria-label="Refresh tasks">↻</button>
-      <div class="app-version">v1.7.0</div>
+      <div class="app-version">v1.8.0</div>
     </div>
   </div>
   <div class="stats-bar">
@@ -963,16 +972,18 @@ function renderTasks() {
 
   console.log('[tasks] raw dueDate values:', tasks.map(t => t.dueDate));
   const isArticle = t => t.name.startsWith('Read:');
+  const isRelationship = t => t.name.startsWith('Reach out to') || (t.tags || []).includes('kit-update');
   const articleTasks = tasks.filter(isArticle);
-  const regularTasks = tasks.filter(t => !isArticle(t));
+  const relationshipTasks = tasks.filter(isRelationship);
+  const regularTasks = tasks.filter(t => !isArticle(t) && !isRelationship(t));
 
   const allTodayTasks = tasks.filter(t => getTaskBucket(t.dueDate) === 'today');
   renderSpireBar(tasks);
 
   const overdueTasks = regularTasks.filter(t => getTaskBucket(t.dueDate) === 'overdue');
   const dueLaterTasks = regularTasks.filter(t => getTaskBucket(t.dueDate) === 'later-today');
-  const todayTasks = allTodayTasks.filter(t => !isArticle(t));
-  console.log('[tasks] today:', today, '| today:', todayTasks.length, '| dueLater:', dueLaterTasks.length, '| overdue:', overdueTasks.length, '| articles:', articleTasks.length);
+  const todayTasks = allTodayTasks.filter(t => !isArticle(t) && !isRelationship(t));
+  console.log('[tasks] today:', today, '| today:', todayTasks.length, '| dueLater:', dueLaterTasks.length, '| overdue:', overdueTasks.length, '| articles:', articleTasks.length, '| relationships:', relationshipTasks.length);
 
   let html = '';
 
@@ -994,6 +1005,11 @@ function renderTasks() {
   if (articleTasks.length > 0) {
     html += `<div class="section-label">📰 Articles (${articleTasks.length})</div>`;
     html += articleTasks.map(t => articleCard(t)).join('');
+  }
+
+  if (relationshipTasks.length > 0) {
+    html += `<div class="section-label">👥 Relationships (${relationshipTasks.length})</div>`;
+    html += relationshipTasks.map(t => relationshipCard(t)).join('');
   }
 
   html += `<a class="notion-link" href="https://www.notion.so/64204e6b365f836c83798111f9c55f5a?v=33904e6b365f81d9884f000c75f1408d" target="_blank" rel="noopener">
@@ -1087,6 +1103,27 @@ function articleCard(task) {
       <div class="article-body">
         <div class="article-title">${escHtml(title)}</div>
         ${openBtn}
+      </div>
+      <div class="card-right">
+        ${spireBadge}
+      </div>
+    </div>`;
+}
+
+function relationshipCard(task) {
+  const spireBadge = (task.spire && task.spire.length > 0)
+    ? `<span class="spire-badge">${task.spire.map(d => `<span class="spire-dim spire-${d}">${d}</span>`).join('')}</span>`
+    : '';
+  const notesHtml = task.notes
+    ? `<div class="relationship-notes">${escHtml(task.notes)}</div>`
+    : '';
+
+  return `
+    <div class="article-card" data-id="${task.id}">
+      <button class="check-btn" data-id="${task.id}" title="Mark complete" aria-label="Mark '${escHtml(task.name)}' complete"></button>
+      <div class="article-body">
+        <div class="article-title">${escHtml(task.name)}</div>
+        ${notesHtml}
       </div>
       <div class="card-right">
         ${spireBadge}
