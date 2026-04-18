@@ -523,6 +523,47 @@
     .park-btn:hover { border-color: #818cf8; background: #eef2ff; }
     .park-btn:active { opacity: 0.7; }
 
+    /* ── Article card ── */
+    .article-card {
+      background: var(--card);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      transition: box-shadow 0.15s, opacity 0.3s, transform 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+    .article-card:hover { box-shadow: var(--shadow-md); }
+    .article-card.completing { opacity: 0; transform: translateX(60px); }
+    .article-body { flex: 1; min-width: 0; }
+    .article-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.4;
+      word-break: break-word;
+      margin-bottom: 8px;
+    }
+    .article-open {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 5px 14px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      background: var(--primary);
+      color: #fff;
+      text-decoration: none;
+      transition: opacity 0.15s;
+    }
+    .article-open:hover { opacity: 0.82; }
+
     /* ── SPIRE picker ── */
     .spire-picker {
       display: flex;
@@ -600,7 +641,7 @@
     </div>
     <div>
       <button class="btn-refresh" id="refreshBtn" title="Refresh" aria-label="Refresh tasks">↻</button>
-      <div class="app-version">v1.6.0</div>
+      <div class="app-version">v1.7.0</div>
     </div>
   </div>
   <div class="stats-bar">
@@ -917,11 +958,17 @@ function renderTasks() {
   }
 
   console.log('[tasks] raw dueDate values:', tasks.map(t => t.dueDate));
-  const overdueTasks = tasks.filter(t => getTaskBucket(t.dueDate) === 'overdue');
-  const dueLaterTasks = tasks.filter(t => getTaskBucket(t.dueDate) === 'later-today');
-  const todayTasks = tasks.filter(t => getTaskBucket(t.dueDate) === 'today');
-  renderSpireBar(todayTasks);
-  console.log('[tasks] today:', today, '| today:', todayTasks.length, '| dueLater:', dueLaterTasks.length, '| overdue:', overdueTasks.length);
+  const isArticle = t => t.name.startsWith('Read:');
+  const articleTasks = tasks.filter(isArticle);
+  const regularTasks = tasks.filter(t => !isArticle(t));
+
+  const allTodayTasks = tasks.filter(t => getTaskBucket(t.dueDate) === 'today');
+  renderSpireBar(allTodayTasks);
+
+  const overdueTasks = regularTasks.filter(t => getTaskBucket(t.dueDate) === 'overdue');
+  const dueLaterTasks = regularTasks.filter(t => getTaskBucket(t.dueDate) === 'later-today');
+  const todayTasks = allTodayTasks.filter(t => !isArticle(t));
+  console.log('[tasks] today:', today, '| today:', todayTasks.length, '| dueLater:', dueLaterTasks.length, '| overdue:', overdueTasks.length, '| articles:', articleTasks.length);
 
   let html = '';
 
@@ -938,6 +985,11 @@ function renderTasks() {
   if (dueLaterTasks.length > 0) {
     html += `<div class="section-label">⏰ Due Later (${dueLaterTasks.length})</div>`;
     html += dueLaterTasks.map(t => taskCard(t, true)).join('');
+  }
+
+  if (articleTasks.length > 0) {
+    html += `<div class="section-label">📰 Articles (${articleTasks.length})</div>`;
+    html += articleTasks.map(t => articleCard(t)).join('');
   }
 
   html += `<a class="notion-link" href="https://www.notion.so/64204e6b365f836c83798111f9c55f5a?v=33904e6b365f81d9884f000c75f1408d" target="_blank" rel="noopener">
@@ -1011,6 +1063,28 @@ function taskCard(task, isLater = false) {
       </div>
       <div class="card-right">
         <button class="park-btn" data-id="${task.id}" data-name="${escHtml(task.name)}" data-url="${escHtml(task.url || '')}" data-notes="${escHtml(task.notes || '')}" data-priority="${escHtml(task.priority || '')}" data-project="${escHtml(JSON.stringify(task.project || []))}" data-due-date="${escHtml(task.dueDate || '')}" data-article-url="${escHtml(task.articleUrl || '')}" title="Park as Future Project" aria-label="Park '${task.name}' as Future Project">🚀</button>
+        ${spireBadge}
+      </div>
+    </div>`;
+}
+
+function articleCard(task) {
+  const title = task.name.replace(/^Read:\s*/i, '');
+  const spireBadge = (task.spire && task.spire.length > 0)
+    ? `<span class="spire-badge">${task.spire.map(d => `<span class="spire-dim spire-${d}">${d}</span>`).join('')}</span>`
+    : '';
+  const openBtn = task.articleUrl
+    ? `<a class="article-open" href="${escHtml(task.articleUrl)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Open →</a>`
+    : '';
+
+  return `
+    <div class="article-card" data-id="${task.id}">
+      <button class="check-btn" data-id="${task.id}" title="Mark complete" aria-label="Mark '${escHtml(task.name)}' complete"></button>
+      <div class="article-body">
+        <div class="article-title">${escHtml(title)}</div>
+        ${openBtn}
+      </div>
+      <div class="card-right">
         ${spireBadge}
       </div>
     </div>`;
