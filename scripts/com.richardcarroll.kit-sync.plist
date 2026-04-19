@@ -8,7 +8,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/usr/bin/python3</string>
-        <string>/Users/richardcarroll/Documents/task-app/scripts/kit_sync.py</string>
+        <string>/Users/richardcarroll/Library/Scripts/kit_sync.py</string>
     </array>
 
     <key>EnvironmentVariables</key>
@@ -18,7 +18,7 @@
     </dict>
 
     <key>WorkingDirectory</key>
-    <string>/Users/richardcarroll/Documents/task-app</string>
+    <string>/Users/richardcarroll/Library/Scripts</string>
 
     <key>StartCalendarInterval</key>
     <dict>
