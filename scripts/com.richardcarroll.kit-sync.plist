@@ -11,7 +11,6 @@
         <string>/Users/richardcarroll/Documents/task-app/scripts/kit_sync.py</string>
     </array>
 
-    <!-- Replace YOUR_NOTION_TOKEN_HERE with your actual Notion integration token -->
     <key>EnvironmentVariables</key>
     <dict>
         <key>NOTION_TOKEN</key>
