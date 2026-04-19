@@ -19,7 +19,7 @@ from typing import Optional
 # --- Config ---
 CHAT_DB = os.path.expanduser("~/Library/Messages/chat.db")
 NOTION_TOKEN = os.environ["NOTION_TOKEN"]
-KIT_DB_ID = "7716ac0f-6794-4406-aaaf-6a7de70d05f0"
+KIT_DB_ID = "44f5fdf6-c4b5-42ed-a97b-5a667ffebd13"
 NOTION_VERSION = "2022-06-28"
 LOOKBACK_DAYS = 30
 
