@@ -7,8 +7,7 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/bin/python3</string>
-        <string>/Users/richardcarroll/Library/Scripts/kit_sync.py</string>
+        <string>/Users/richardcarroll/Library/Scripts/KitSyncRunner.app/Contents/MacOS/kit-sync-runner</string>
     </array>
 
     <key>EnvironmentVariables</key>
