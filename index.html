@@ -767,10 +767,7 @@
       <div class="form-group">
         <label>Project / Category</label>
         <div class="multi-check" id="projectCheck">
-          <label><input type="checkbox" value="Personal" /> 🏠 Personal</label>
-          <label><input type="checkbox" value="Work" /> 💼 Work</label>
-          <label><input type="checkbox" value="Health" /> 💪 Health</label>
-          <label><input type="checkbox" value="Finance" /> 💰 Finance</label>
+          <span style="color:var(--muted);font-size:.85em">Loading projects…</span>
         </div>
       </div>
       <div class="form-group">
@@ -962,6 +959,19 @@ async function loadTasks() {
       const projectsData = await projectsRes.json();
       projectMap = {};
       (Array.isArray(projectsData) ? projectsData : []).forEach(p => { projectMap[p.id] = p; });
+      const projectCheck = document.getElementById('projectCheck');
+      if (projectCheck) {
+        projectCheck.innerHTML = '';
+        Object.values(projectMap).sort((a, b) => a.name.localeCompare(b.name)).forEach(p => {
+          const lbl = document.createElement('label');
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.value = p.id;
+          lbl.appendChild(cb);
+          lbl.append(' ' + p.name);
+          projectCheck.appendChild(lbl);
+        });
+      }
     }
 
     tasks = data.tasks || [];
