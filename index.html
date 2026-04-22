@@ -962,6 +962,13 @@ async function loadTasks() {
       const projectsData = await projectsRes.json();
       projectMap = {};
       (Array.isArray(projectsData) ? projectsData : []).forEach(p => { projectMap[p.id] = p; });
+      const projectCheckDiv = $('projectCheck');
+      if (projectCheckDiv) {
+        const entries = Object.values(projectMap).sort((a, b) => a.name.localeCompare(b.name));
+        projectCheckDiv.innerHTML = entries.length
+          ? entries.map(p => `<label><input type="checkbox" value="${p.id}" /> ${p.name}</label>`).join('')
+          : '<span style="color:#aaa;font-size:13px">No projects found</span>';
+      }
     }
 
     tasks = data.tasks || [];

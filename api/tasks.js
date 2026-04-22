@@ -151,7 +151,7 @@ module.exports = async (req, res) => {
         properties['Due Date'] = { date: dateObj };
       }
       if (priority) properties['Priority'] = { select: { name: priority } };
-      if (project?.length) properties['Project'] = { multi_select: project.map(p => ({ name: p })) };
+      if (project?.length) properties['Project Link'] = { relation: project.map(id => ({ id })) };
       if (notes?.trim()) properties['Notes'] = { rich_text: [{ text: { content: notes.trim() } }] };
 
       const page = await fetchNotion('/pages', {
