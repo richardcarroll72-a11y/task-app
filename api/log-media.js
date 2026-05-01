@@ -1,0 +1,104 @@
+// Vercel Serverless Function — Media Log → Notion
+// POST /api/log-media
+//   body: {
+//     type:     "book" | "vinyl",
+//     title:    string,
+//     author?:  string,   // for books
+//     artist?:  string,   // for vinyl
+//     status:   "started" | "finished",
+//     barcode?: string,
+//     cover?:   string,   // optional cover image URL
+//     year?:    string | number,
+//   }
+//
+// Required env vars:
+//   NOTION_TOKEN       — already set for the task app
+//   MEDIA_LOG_DB_ID    — the "📺 Media Log" database ID. Find it by opening the
+//                        DB in Notion and copying the 32-char hex from the URL:
+//                        https://www.notion.so/<workspace>/<DB_ID>?v=...
+//
+// SPIRE convention (matches existing task app):
+//   Books → ["I"] (Intellectual)
+//   Vinyl → ["E"] (Emotional)
+
+const NOTION_API = 'https://api.notion.com/v1';
+const NOTION_VERSION = '2022-06-28';
+
+function notionHeaders() {
+  return {
+    'Authorization': `Bearer ${process.env.NOTION_TOKEN}`,
+    'Notion-Version': NOTION_VERSION,
+    'Content-Type': 'application/json',
+  };
+}
+
+async function fetchNotion(path, options = {}) {
+  const res = await fetch(`${NOTION_API}${path}`, {
+    ...options,
+    headers: { ...notionHeaders(), ...(options.headers || {}) },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `Notion API error ${res.status}`);
+  }
+  return res.json();
+}
+
+module.exports = async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  if (!process.env.NOTION_TOKEN) return res.status(500).json({ error: 'NOTION_TOKEN not set' });
+  const DB_ID = process.env.MEDIA_LOG_DB_ID;
+  if (!DB_ID) return res.status(500).json({ error: 'MEDIA_LOG_DB_ID not set' });
+
+  try {
+    const body = req.body || {};
+    const { type, title, author, artist, status, barcode, cover, year } = body;
+
+    if (!title?.trim()) return res.status(400).json({ error: 'title required' });
+    if (type !== 'book' && type !== 'vinyl') return res.status(400).json({ error: 'type must be "book" or "vinyl"' });
+    if (status !== 'started' && status !== 'finished') return res.status(400).json({ error: 'status must be "started" or "finished"' });
+
+    const creator = type === 'book' ? (author || '') : (artist || '');
+    const typeLabel = type === 'book' ? 'Book' : 'Vinyl';
+    const statusLabel = status === 'started' ? 'Started' : 'Finished';
+    const spire = type === 'book' ? ['I'] : ['E'];
+
+    const properties = {
+      'Name': { title: [{ text: { content: title.trim() } }] },
+      'Type': { select: { name: typeLabel } },
+      'Status': { status: { name: statusLabel } },
+      'SPIRE': { multi_select: spire.map(s => ({ name: s })) },
+    };
+    if (creator.trim()) {
+      properties['Creator'] = { rich_text: [{ text: { content: creator.trim() } }] };
+    }
+    if (barcode?.toString().trim()) {
+      properties['Barcode'] = { rich_text: [{ text: { content: barcode.toString().trim() } }] };
+    }
+    if (cover) properties['Cover'] = { url: cover };
+    if (year) properties['Year'] = { rich_text: [{ text: { content: String(year) } }] };
+
+    // Set the page cover too if we have an image — purely cosmetic in Notion
+    const pagePayload = {
+      parent: { database_id: DB_ID },
+      properties,
+    };
+    if (cover) pagePayload.cover = { type: 'external', external: { url: cover } };
+
+    const page = await fetchNotion('/pages', {
+      method: 'POST',
+      body: JSON.stringify(pagePayload),
+    });
+
+    return res.status(201).json({ ok: true, id: page.id, url: page.url });
+  } catch (err) {
+    console.error('log-media error:', err);
+    return res.status(500).json({ error: err.message || 'Internal server error' });
+  }
+};

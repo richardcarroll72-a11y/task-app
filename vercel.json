@@ -12,6 +12,14 @@
     "api/projects.js": {
       "memory": 128,
       "maxDuration": 15
+    },
+    "api/lookup-barcode.js": {
+      "memory": 128,
+      "maxDuration": 15
+    },
+    "api/log-media.js": {
+      "memory": 128,
+      "maxDuration": 15
     }
   },
   "routes": [
@@ -26,6 +34,22 @@
     {
       "src": "/api/future-project",
       "dest": "/api/future-project.js"
+    },
+    {
+      "src": "/api/lookup-barcode",
+      "dest": "/api/lookup-barcode.js"
+    },
+    {
+      "src": "/api/log-media",
+      "dest": "/api/log-media.js"
+    },
+    {
+      "src": "/scan",
+      "dest": "/scan.html"
+    },
+    {
+      "src": "/scan-media",
+      "dest": "/scan.html"
     },
     {
       "src": "/(.*)",

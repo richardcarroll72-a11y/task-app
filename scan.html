@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#0a0a0f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Scan Media" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%236366f1'/%3E%3Ctext y='72' x='50' text-anchor='middle' font-size='60'%3E📚%3C/text%3E%3C/svg%3E" />
+  <title>Scan Media</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0f;
+      --card: #16161f;
+      --card-2: #1f1f2c;
+      --text: #f5f5f7;
+      --muted: #8b8b99;
+      --primary: #6366f1;
+      --primary-dim: rgba(99,102,241,0.18);
+      --green: #10b981;
+      --red: #ef4444;
+      --border: rgba(255,255,255,0.08);
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      overflow: hidden;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* ── Header ── */
+    .topbar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 30;
+      padding: calc(var(--safe-top) + 12px) 16px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: linear-gradient(to bottom, rgba(10,10,15,0.85), rgba(10,10,15,0));
+    }
+    .topbar h1 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .topbar a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      color: var(--text);
+      text-decoration: none;
+      background: rgba(255,255,255,0.08);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      font-size: 1.1rem;
+      line-height: 1;
+    }
+
+    /* ── Camera viewfinder ── */
+    #reader {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      background: #000;
+      overflow: hidden;
+    }
+    #reader video {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: cover !important;
+    }
+    /* Hide the library's default UI chrome */
+    #reader > div:not(#qr-shaded-region) > img,
+    #reader__dashboard,
+    #reader__scan_region img,
+    #reader__header_message,
+    #reader__filescan_input,
+    #reader__camera_selection,
+    #reader__camera_permission_button,
+    #reader__dashboard_section,
+    #reader__dashboard_section_csr,
+    #reader__dashboard_section_swaplink,
+    #reader__status_span {
+      display: none !important;
+    }
+    #reader__scan_region {
+      background: transparent !important;
+      min-height: 0 !important;
+    }
+
+    /* Reticle overlay */
+    .reticle {
+      position: fixed;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: min(78vw, 360px);
+      height: 160px;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .reticle::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 18px;
+      box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);
+    }
+    .reticle::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 18px;
+      border: 2px solid rgba(255,255,255,0.85);
+    }
+    .reticle-line {
+      position: absolute;
+      left: 8%;
+      right: 8%;
+      top: 50%;
+      height: 2px;
+      background: var(--primary);
+      box-shadow: 0 0 8px var(--primary);
+      transform: translateY(-50%);
+      animation: scanline 2s ease-in-out infinite;
+    }
+    @keyframes scanline {
+      0%, 100% { top: 18%; opacity: 1; }
+      50% { top: 82%; opacity: 0.6; }
+    }
+
+    .hint {
+      position: fixed;
+      left: 0; right: 0;
+      bottom: calc(var(--safe-bottom) + 32px);
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      z-index: 10;
+      pointer-events: none;
+      padding: 0 24px;
+    }
+
+    /* ── Idle screen (before camera starts) ── */
+    .idle {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      padding: 0 28px;
+      text-align: center;
+      background: var(--bg);
+    }
+    .idle .icon {
+      font-size: 4rem;
+      line-height: 1;
+    }
+    .idle h2 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .idle p {
+      color: var(--muted);
+      font-size: 0.95rem;
+      max-width: 320px;
+      line-height: 1.5;
+    }
+    .btn {
+      appearance: none;
+      border: none;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 600;
+      font-size: 1rem;
+      padding: 14px 28px;
+      border-radius: 14px;
+      background: var(--primary);
+      color: white;
+      transition: transform 0.1s, opacity 0.15s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+    .btn.secondary {
+      background: var(--card-2);
+      color: var(--text);
+    }
+    .btn.success { background: var(--green); }
+
+    /* ── Result sheet ── */
+    .sheet {
+      position: fixed;
+      left: 0; right: 0;
+      bottom: 0;
+      z-index: 40;
+      background: var(--card);
+      border-top: 1px solid var(--border);
+      border-radius: 24px 24px 0 0;
+      padding: 22px 20px calc(var(--safe-bottom) + 22px);
+      transform: translateY(110%);
+      transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1);
+      box-shadow: 0 -10px 40px rgba(0,0,0,0.5);
+    }
+    .sheet.open { transform: translateY(0); }
+    .sheet-grab {
+      width: 40px;
+      height: 4px;
+      background: rgba(255,255,255,0.18);
+      border-radius: 2px;
+      margin: -8px auto 16px;
+    }
+    .sheet-row {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      margin-bottom: 18px;
+    }
+    .sheet-cover {
+      width: 84px;
+      height: 84px;
+      border-radius: 10px;
+      object-fit: cover;
+      background: var(--card-2);
+      flex-shrink: 0;
+    }
+    .sheet-cover.book { height: 110px; }
+    .sheet-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .sheet-type {
+      display: inline-block;
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: var(--primary-dim);
+      color: var(--primary);
+      margin-bottom: 8px;
+    }
+    .sheet-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      line-height: 1.25;
+      margin-bottom: 4px;
+      word-break: break-word;
+    }
+    .sheet-creator {
+      font-size: 0.9rem;
+      color: var(--muted);
+      word-break: break-word;
+    }
+    .sheet-actions {
+      display: flex;
+      gap: 10px;
+    }
+    .sheet-actions .btn { flex: 1; padding: 14px 0; }
+    .sheet-cancel {
+      display: block;
+      width: 100%;
+      margin-top: 12px;
+      background: transparent;
+      color: var(--muted);
+      padding: 10px;
+      font-size: 0.85rem;
+    }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(var(--safe-bottom) + 32px);
+      transform: translateX(-50%) translateY(120%);
+      z-index: 60;
+      background: var(--green);
+      color: white;
+      padding: 12px 22px;
+      border-radius: 999px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      box-shadow: 0 8px 24px rgba(16,185,129,0.4);
+      transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1);
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+    .toast.error {
+      background: var(--red);
+      box-shadow: 0 8px 24px rgba(239,68,68,0.4);
+    }
+
+    /* ── Spinner ── */
+    .spinner {
+      width: 22px;
+      height: 22px;
+      border: 2.5px solid rgba(255,255,255,0.25);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Status banner (looking up / errors over camera) ── */
+    .banner {
+      position: fixed;
+      left: 50%;
+      top: calc(var(--safe-top) + 60px);
+      transform: translateX(-50%);
+      z-index: 25;
+      background: rgba(22,22,31,0.92);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 10px 18px;
+      font-size: 0.88rem;
+      color: var(--text);
+      display: none;
+      align-items: center;
+      gap: 10px;
+    }
+    .banner.show { display: inline-flex; }
+    .banner.error { border-color: rgba(239,68,68,0.4); color: #fca5a5; }
+  </style>
+</head>
+<body>
+
+  <!-- Idle / start screen -->
+  <div class="idle" id="idleScreen">
+    <div class="icon">📚🎵</div>
+    <h2>Scan Media</h2>
+    <p>Point your camera at a book ISBN or vinyl barcode to log it to your Media Log.</p>
+    <button class="btn" id="startBtn">Start scanning</button>
+    <p style="font-size: 0.75rem; opacity: 0.6;">Camera access required</p>
+  </div>
+
+  <!-- Top bar (visible while scanning) -->
+  <div class="topbar" id="topbar" style="display:none;">
+    <a href="/" aria-label="Close">✕</a>
+    <h1>Scan Media</h1>
+    <span style="width:36px;"></span>
+  </div>
+
+  <!-- Camera scanner -->
+  <div id="reader"></div>
+
+  <!-- Reticle -->
+  <div class="reticle" id="reticle" style="display:none;">
+    <div class="reticle-line"></div>
+  </div>
+
+  <!-- Hint -->
+  <div class="hint" id="hint" style="display:none;">Align barcode within the frame</div>
+
+  <!-- Status banner -->
+  <div class="banner" id="banner">
+    <span class="spinner" id="bannerSpinner"></span>
+    <span id="bannerText">Looking up…</span>
+  </div>
+
+  <!-- Result sheet -->
+  <div class="sheet" id="sheet">
+    <div class="sheet-grab"></div>
+    <div class="sheet-row">
+      <img class="sheet-cover" id="resultCover" alt="" />
+      <div class="sheet-info">
+        <span class="sheet-type" id="resultType">BOOK</span>
+        <div class="sheet-title" id="resultTitle">—</div>
+        <div class="sheet-creator" id="resultCreator">—</div>
+      </div>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn secondary" data-status="started">Started</button>
+      <button class="btn success" data-status="finished">Finished</button>
+    </div>
+    <button class="sheet-cancel" id="cancelBtn">Cancel</button>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast">Logged ✓</div>
+
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script>
+    (function () {
+      'use strict';
+
+      const idleScreen = document.getElementById('idleScreen');
+      const topbar = document.getElementById('topbar');
+      const reticle = document.getElementById('reticle');
+      const hint = document.getElementById('hint');
+      const banner = document.getElementById('banner');
+      const bannerText = document.getElementById('bannerText');
+      const bannerSpinner = document.getElementById('bannerSpinner');
+      const sheet = document.getElementById('sheet');
+      const resultCover = document.getElementById('resultCover');
+      const resultType = document.getElementById('resultType');
+      const resultTitle = document.getElementById('resultTitle');
+      const resultCreator = document.getElementById('resultCreator');
+      const cancelBtn = document.getElementById('cancelBtn');
+      const startBtn = document.getElementById('startBtn');
+      const toast = document.getElementById('toast');
+
+      let scanner = null;
+      let busy = false;          // currently looking-up or showing result sheet
+      let lastBarcode = null;    // dedupe rapid repeat reads
+      let lastBarcodeAt = 0;
+      let currentResult = null;  // { type, title, author/artist, cover, barcode }
+
+      function showBanner(msg, isError = false, withSpinner = true) {
+        bannerText.textContent = msg;
+        bannerSpinner.style.display = withSpinner ? '' : 'none';
+        banner.classList.toggle('error', isError);
+        banner.classList.add('show');
+      }
+      function hideBanner() { banner.classList.remove('show'); }
+
+      function showToast(msg, isError = false) {
+        toast.textContent = msg;
+        toast.classList.toggle('error', isError);
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 2200);
+      }
+
+      function openSheet(result) {
+        currentResult = result;
+        const isBook = result.type === 'book';
+        resultType.textContent = isBook ? 'BOOK' : 'VINYL';
+        resultTitle.textContent = result.title || 'Unknown';
+        resultCreator.textContent = isBook ? (result.author || 'Unknown author') : (result.artist || 'Unknown artist');
+
+        if (result.cover) {
+          resultCover.src = result.cover;
+          resultCover.style.display = '';
+        } else {
+          resultCover.removeAttribute('src');
+          resultCover.style.display = 'none';
+        }
+        resultCover.classList.toggle('book', isBook);
+
+        sheet.classList.add('open');
+      }
+      function closeSheet() {
+        sheet.classList.remove('open');
+        currentResult = null;
+        // small delay before allowing scans again so the same barcode in view doesn't immediately re-trigger
+        setTimeout(() => {
+          busy = false;
+          lastBarcode = null;
+        }, 600);
+      }
+
+      async function lookupBarcode(code) {
+        const res = await fetch(`/api/lookup-barcode?barcode=${encodeURIComponent(code)}`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.found === false) {
+          throw new Error(data.error || 'Not found');
+        }
+        return data;
+      }
+
+      async function logMedia(status) {
+        if (!currentResult) return;
+        const payload = {
+          type: currentResult.type,
+          title: currentResult.title,
+          status,
+          barcode: currentResult.barcode,
+          cover: currentResult.cover || undefined,
+          year: currentResult.year || undefined,
+        };
+        if (currentResult.type === 'book') payload.author = currentResult.author;
+        else payload.artist = currentResult.artist;
+
+        showBanner('Logging to Notion…');
+        const res = await fetch('/api/log-media', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(() => ({}));
+        hideBanner();
+        if (!res.ok) throw new Error(data.error || 'Failed to log');
+        return data;
+      }
+
+      async function onScan(decodedText) {
+        if (busy) return;
+        const code = (decodedText || '').replace(/\D/g, '');
+        if (!code || code.length < 8) return;
+
+        // Dedupe identical reads within 3 seconds
+        const now = Date.now();
+        if (code === lastBarcode && now - lastBarcodeAt < 3000) return;
+        lastBarcode = code;
+        lastBarcodeAt = now;
+        busy = true;
+
+        // Haptic on supported devices
+        if (navigator.vibrate) navigator.vibrate(40);
+
+        showBanner('Looking up…');
+        try {
+          const result = await lookupBarcode(code);
+          result.barcode = code;
+          hideBanner();
+          openSheet(result);
+        } catch (err) {
+          hideBanner();
+          showToast(err.message || 'Lookup failed', true);
+          setTimeout(() => { busy = false; lastBarcode = null; }, 1500);
+        }
+      }
+
+      async function startScanner() {
+        startBtn.disabled = true;
+        startBtn.textContent = 'Starting camera…';
+
+        try {
+          const formats = [
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.CODE_128,
+          ];
+          scanner = new Html5Qrcode('reader', { formatsToSupport: formats, verbose: false });
+
+          await scanner.start(
+            { facingMode: { exact: 'environment' } },
+            { fps: 12, qrbox: undefined, aspectRatio: window.innerHeight / window.innerWidth },
+            onScan,
+            () => { /* per-frame failures are normal — ignore */ }
+          ).catch(async () => {
+            // Fall back if `exact: environment` isn't honored (some iOS)
+            await scanner.start(
+              { facingMode: 'environment' },
+              { fps: 12, qrbox: undefined },
+              onScan,
+              () => {}
+            );
+          });
+
+          idleScreen.style.display = 'none';
+          topbar.style.display = '';
+          reticle.style.display = '';
+          hint.style.display = '';
+        } catch (err) {
+          startBtn.disabled = false;
+          startBtn.textContent = 'Start scanning';
+          showToast(err?.message || 'Camera access denied', true);
+        }
+      }
+
+      // ── Wire up buttons ────────────────────────────────────────────────
+      startBtn.addEventListener('click', startScanner);
+      cancelBtn.addEventListener('click', closeSheet);
+
+      document.querySelectorAll('.sheet-actions .btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const status = btn.dataset.status;
+          if (!status) return;
+          // disable both buttons while logging
+          document.querySelectorAll('.sheet-actions .btn').forEach(b => b.disabled = true);
+          try {
+            await logMedia(status);
+            sheet.classList.remove('open');
+            showToast(status === 'started' ? 'Started — logged ✓' : 'Finished — logged ✓');
+            currentResult = null;
+            setTimeout(() => { busy = false; lastBarcode = null; }, 800);
+          } catch (err) {
+            showToast(err.message || 'Failed to log', true);
+          } finally {
+            document.querySelectorAll('.sheet-actions .btn').forEach(b => b.disabled = false);
+          }
+        });
+      });
+
+      // Stop the camera if the user navigates away — saves battery
+      window.addEventListener('pagehide', () => {
+        if (scanner) scanner.stop().catch(() => {});
+      });
+    })();
+  </script>
+</body>
+</html>
