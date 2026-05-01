@@ -487,8 +487,12 @@
           cover: currentResult.cover || undefined,
           year: currentResult.year || undefined,
         };
-        if (currentResult.type === 'book') payload.author = currentResult.author;
-        else payload.artist = currentResult.artist;
+        if (currentResult.type === 'book') {
+          payload.author = currentResult.author;
+        } else {
+          payload.artist = currentResult.artist;
+          if (currentResult.releaseId) payload.releaseId = currentResult.releaseId;
+        }
 
         showBanner('Logging to Notion…');
         const res = await fetch('/api/log-media', {

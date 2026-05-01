@@ -90,6 +90,7 @@ module.exports = async (req, res) => {
       artist: artist || 'Unknown artist',
       cover: first.cover_image || first.thumb || null,
       year: first.year || null,
+      releaseId: first.id || null,
     });
   } catch (err) {
     console.error('lookup-barcode error:', err);
