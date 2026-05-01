@@ -1038,7 +1038,7 @@ function renderTasks() {
   }
 
   console.log('[tasks] raw dueDate values:', tasks.map(t => t.dueDate));
-  const isArticle = t => t.name.startsWith('Read:');
+  const isArticle = t => t.name.startsWith('Read:') || t.type === 'Article' || t.type === 'Pluralistic';
   const isRelationship = t => t.name.startsWith('Reach out to') || (t.tags || []).includes('kit-update');
   const articleTasks = tasks.filter(isArticle);
   const relationshipTasks = tasks.filter(isRelationship);
