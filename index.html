@@ -1288,6 +1288,14 @@ function parentTaskCard(task) {
     ? `<span class="spire-badge">${task.spire.map(d => `<span class="spire-dim spire-${d}">${d}</span>`).join('')}</span>`
     : '';
 
+  const urlFromNotes = (task.notes && task.notes.match(/https?:\/\/[^\s\n]+/)?.[0]) || null;
+  const primaryUrl = task.articleUrl || urlFromNotes;
+  const secondaryUrl = (task.articleUrl && urlFromNotes && urlFromNotes !== task.articleUrl) ? urlFromNotes : null;
+  const linkBadge = [
+    primaryUrl ? `<a class="article-link" href="${escHtml(primaryUrl)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">🔗 Open</a>` : '',
+    secondaryUrl ? `<a class="article-link" href="${escHtml(secondaryUrl)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">🔗 Notes</a>` : '',
+  ].join('');
+
   const subtaskItems = (task.subtasks || [])
     .filter(s => s.status !== 'Done')
     .map(s => subtaskCard(s, task.id))
@@ -1309,6 +1317,7 @@ function parentTaskCard(task) {
           <div class="task-meta">
             ${priorityBadge}
             ${dueBadge}
+            ${linkBadge}
           </div>
         </div>
         <div class="card-right">
