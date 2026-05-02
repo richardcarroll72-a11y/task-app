@@ -20,9 +20,9 @@
 //   DISCOGS_TOKEN      — used to add vinyl entries to the user's collection
 //   DISCOGS_USERNAME   — defaults to "richardcarroll72". Folder 1 = Uncategorized.
 //
-// SPIRE convention (matches existing task app):
-//   Books → ["I"] (Intellectual)
-//   Vinyl → ["E"] (Emotional)
+// SPIRE convention (matches Notion Media Log DB):
+//   Books → "I — Intellectual"
+//   Vinyl → "E — Emotional"
 
 const NOTION_API = 'https://api.notion.com/v1';
 const NOTION_VERSION = '2022-06-28';
@@ -101,29 +101,28 @@ module.exports = async (req, res) => {
     const creator = type === 'book' ? (author || '') : (artist || '');
     const typeLabel = type === 'book' ? 'Book' : 'Vinyl';
     const statusLabel = status === 'started' ? 'Started' : 'Finished';
-    const spire = type === 'book' ? ['I'] : ['E'];
+    const spireValue = type === 'book' ? 'I — Intellectual' : 'E — Emotional';
+
+    // Build Notes: combine creator (Author/Artist) and status
+    let notesContent = statusLabel;
+    if (creator.trim()) {
+      const creatorLabel = type === 'book' ? 'Author' : 'Artist';
+      notesContent += ` — ${creatorLabel}: ${creator.trim()}`;
+    }
 
     const properties = {
       'Name': { title: [{ text: { content: title.trim() } }] },
       'Type': { select: { name: typeLabel } },
-      'Status': { status: { name: statusLabel } },
-      'SPIRE': { multi_select: spire.map(s => ({ name: s })) },
+      'SPIRE': { select: { name: spireValue } },
+      'Date': { date: { start: new Date().toISOString().split('T')[0] } },
+      'Notes': { rich_text: [{ text: { content: notesContent } }] },
     };
-    if (creator.trim()) {
-      properties['Creator'] = { rich_text: [{ text: { content: creator.trim() } }] };
-    }
-    if (barcode?.toString().trim()) {
-      properties['Barcode'] = { rich_text: [{ text: { content: barcode.toString().trim() } }] };
-    }
-    if (cover) properties['Cover'] = { url: cover };
-    if (year) properties['Year'] = { rich_text: [{ text: { content: String(year) } }] };
 
-    // Set the page cover too if we have an image — purely cosmetic in Notion
+    // Set the page payload
     const pagePayload = {
       parent: { database_id: DB_ID },
       properties,
     };
-    if (cover) pagePayload.cover = { type: 'external', external: { url: cover } };
 
     const page = await fetchNotion('/pages', {
       method: 'POST',

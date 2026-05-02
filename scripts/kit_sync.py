@@ -1,227 +1,328 @@
 #!/usr/bin/env python3
 """
-kit_sync.py — Syncs iMessage Last Contact dates to Notion Keep In Touch Tracker.
+kit_sync.py — Syncs iMessage Last Contact dates + conversation summaries
+to the Notion Keep In Touch Tracker.
 
-Reads sent messages from chat.db for the last 30 days, matches phone numbers
-to KIT records in Notion, and updates Last Contact + Next Reach Out fields.
+Usage:
+    kit_sync.py [--dry-run]
+
+Requires env vars:
+    NOTION_TOKEN        — Notion integration token
+    ANTHROPIC_API_KEY   — Anthropic API key for Claude Haiku summarisation
+    NOTION_DATABASE_ID  — To-Do database ID (for creating reach-out tasks)
 """
 
+import argparse
 import json
 import os
 import re
 import shutil
 import sqlite3
+import sys
 import tempfile
-import urllib.request
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-# --- Config ---
+# Add scripts directory to path so we can import kit_helpers
+sys.path.insert(0, os.path.dirname(__file__))
+import kit_helpers as kh
+
+# ─── Config ──────────────────────────────────────────────────────────────────
+
 CHAT_DB = os.path.expanduser("~/Library/Messages/chat.db")
 NOTION_TOKEN = os.environ["NOTION_TOKEN"]
-KIT_DB_ID = "44f5fdf6-c4b5-42ed-a97b-5a667ffebd13"
-NOTION_VERSION = "2022-06-28"
+ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+TODO_DB_ID = os.environ.get("NOTION_DATABASE_ID", "")
 LOOKBACK_DAYS = 30
 
-REACH_OUT_DAYS = {
-    "Weekly": 7,
-    "Fortnightly": 14,
-    "Monthly": 30,
-    "Every 2 Months": 60,
-    "Every 3 Months": 90,
-    "Every 6 Months": 180,
-    "Yearly": 365,
-}
-
 # iMessage stores dates as nanoseconds since 2001-01-01 UTC
-MAC_EPOCH = 978307200  # Unix timestamp for 2001-01-01 00:00:00 UTC
+MAC_EPOCH = 978307200
 
 
-def normalize_phone(phone: str) -> str:
-    """Strip to digits, return last 10 digits for country-code-agnostic matching."""
-    digits = re.sub(r"\D", "", phone)
-    return digits[-10:] if len(digits) >= 10 else digits
-
+# ─── iMessage helpers ─────────────────────────────────────────────────────────
 
 def mac_ns_to_datetime(ts: int) -> datetime:
     unix_ts = ts / 1e9 + MAC_EPOCH
     return datetime.fromtimestamp(unix_ts, tz=timezone.utc)
 
 
-def get_sent_contacts(lookback_days: int) -> dict:
+def get_sent_contacts(lookback_days: int, conn: sqlite3.Connection) -> dict:
     """
-    Returns {normalized_phone: latest_sent_datetime} for contacts I messaged
+    Returns {normalized_phone: latest_sent_datetime} for contacts messaged
     in the last lookback_days days.
-
-    Copies chat.db to a temp file first to avoid locking the live database.
     """
-    tmp = tempfile.mktemp(suffix=".db")
-    shutil.copy2(CHAT_DB, tmp)
-    try:
-        conn = sqlite3.connect(tmp)
-        conn.row_factory = sqlite3.Row
+    cutoff_unix = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).timestamp()
+    cutoff_mac_ns = int((cutoff_unix - MAC_EPOCH) * 1e9)
 
-        cutoff_unix = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).timestamp()
-        cutoff_mac_ns = int((cutoff_unix - MAC_EPOCH) * 1e9)
+    query = """
+        SELECT h.id AS phone, MAX(m.date) AS last_date
+        FROM message m
+        JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
+        JOIN chat_handle_join chj ON chj.chat_id = cmj.chat_id
+        JOIN handle h ON h.ROWID = chj.handle_id
+        WHERE m.is_from_me = 1
+          AND m.date > ?
+        GROUP BY h.id
+    """
 
-        # Join through chat to get the recipient handles for sent messages.
-        # This correctly handles group chats — any chat the sent message is in
-        # counts as a "contact" for that message.
-        query = """
-            SELECT h.id AS phone, MAX(m.date) AS last_date
-            FROM message m
-            JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
-            JOIN chat_handle_join chj ON chj.chat_id = cmj.chat_id
-            JOIN handle h ON h.ROWID = chj.handle_id
-            WHERE m.is_from_me = 1
-              AND m.date > ?
-            GROUP BY h.id
-        """
+    results: dict = {}
+    for row in conn.execute(query, (cutoff_mac_ns,)):
+        phone = row[0]
+        last_date = row[1]
+        if "@" in phone:  # skip email-based Apple IDs
+            continue
+        norm = kh.normalise_phone(phone)
+        if not norm:
+            continue
+        dt = mac_ns_to_datetime(last_date)
+        if norm not in results or dt > results[norm]:
+            results[norm] = dt
 
-        results: dict = {}
-        for row in conn.execute(query, (cutoff_mac_ns,)):
-            phone = row["phone"]
-            if "@" in phone:  # skip iMessage addresses that are email-based Apple IDs
-                continue
-            norm = normalize_phone(phone)
-            if not norm:
-                continue
-            dt = mac_ns_to_datetime(row["last_date"])
-            if norm not in results or dt > results[norm]:
-                results[norm] = dt
-
-        conn.close()
-        return results
-    finally:
-        os.unlink(tmp)
+    return results
 
 
-def notion_request(method: str, path: str, body: Optional[dict] = None) -> dict:
-    url = f"https://api.notion.com/v1{path}"
-    data = json.dumps(body).encode() if body else None
-    req = urllib.request.Request(
-        url,
-        data=data,
-        method=method,
-        headers={
-            "Authorization": f"Bearer {NOTION_TOKEN}",
-            "Notion-Version": NOTION_VERSION,
-            "Content-Type": "application/json",
-        },
-    )
-    with urllib.request.urlopen(req) as resp:
-        return json.loads(resp.read())
+def get_conversation_thread(
+    conn: sqlite3.Connection,
+    phone_norm: str,
+    from_date: Optional[datetime],
+    to_date: datetime,
+    dry_run: bool = False,
+) -> str:
+    """
+    Collect all messages (sent + received) for a phone number between
+    from_date (exclusive, or 30 days ago if None) and to_date (inclusive).
+    Returns a plain-text transcript suitable for summarisation.
+    """
+    if from_date is None:
+        from_date = to_date - timedelta(days=30)
+
+    from_mac = int((from_date.timestamp() - MAC_EPOCH) * 1e9)
+    to_mac = int((to_date.timestamp() - MAC_EPOCH) * 1e9)
+
+    # Find all handle IDs that match this normalised phone number
+    handle_rows = conn.execute(
+        "SELECT ROWID FROM handle WHERE id LIKE ?",
+        (f"%{phone_norm[-7:]}%",),  # partial suffix match for area-code variants
+    ).fetchall()
+    if not handle_rows:
+        return ""
+    handle_ids = [r[0] for r in handle_rows]
+    placeholders = ",".join("?" * len(handle_ids))
+
+    # Collect all chat IDs that involve any of these handles
+    chat_rows = conn.execute(
+        f"SELECT DISTINCT chat_id FROM chat_handle_join WHERE handle_id IN ({placeholders})",
+        handle_ids,
+    ).fetchall()
+    if not chat_rows:
+        return ""
+    chat_ids = [r[0] for r in chat_rows]
+    chat_placeholders = ",".join("?" * len(chat_ids))
+
+    # Fetch all messages in those chats within the date window, deduped by ROWID
+    query = f"""
+        SELECT DISTINCT m.ROWID, m.date, m.is_from_me, m.text
+        FROM message m
+        JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
+        WHERE cmj.chat_id IN ({chat_placeholders})
+          AND m.date > ?
+          AND m.date <= ?
+          AND m.text IS NOT NULL
+          AND m.text != ''
+        ORDER BY m.date ASC
+    """
+    rows = conn.execute(query, (*chat_ids, from_mac, to_mac)).fetchall()
+
+    if not rows:
+        return ""
+
+    limit = 3 if dry_run else 200
+    lines = []
+    for rowid, ts, is_from_me, text in rows[:limit]:
+        dt = mac_ns_to_datetime(ts)
+        speaker = "Me" if is_from_me else "Them"
+        lines.append(f"[{dt.strftime('%Y-%m-%d %H:%M')}] {speaker}: {text}")
+
+    return "\n".join(lines)
 
 
-def get_kit_records() -> list:
-    """Fetch all KIT pages from Notion, handling pagination."""
-    pages = []
-    cursor = None
-    while True:
-        body: dict = {"page_size": 100}
-        if cursor:
-            body["start_cursor"] = cursor
-        resp = notion_request("POST", f"/databases/{KIT_DB_ID}/query", body)
-        pages.extend(resp["results"])
-        if not resp.get("has_more"):
-            break
-        cursor = resp["next_cursor"]
-    return pages
+# ─── Overdue To-Do creation ───────────────────────────────────────────────────
+
+def _create_overdue_todos(
+    kit_fields_list: list,
+    notion_token: str,
+    todo_db_id: str,
+    dry_run: bool,
+) -> int:
+    """
+    For each KIT contact whose Next Reach Out date is in the past and who
+    doesn't already have a To-Do task, create one.
+    """
+    if not todo_db_id:
+        return 0
+
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    created = 0
+
+    for fields in kit_fields_list:
+        next_reach_out = kh.parse_notion_date({"date": {"start": fields.get("next_reach_out_raw")}} if fields.get("next_reach_out_raw") else None)
+        if next_reach_out is None:
+            continue
+        if next_reach_out > today:
+            continue
+
+        name = fields["name"]
+        if not name:
+            continue
+
+        last_contact = fields["last_contact"]
+        last_method = fields.get("last_method") or "message"
+        summary = fields.get("last_conversation") or ""
+        notes = kh.format_kit_todo_notes(
+            last_contact or today,
+            summary,
+            last_method,
+        )
+
+        if dry_run:
+            print(f"[kit_sync] [dry-run] Would create To-Do: Reach out to {name}")
+            continue
+
+        _id, created_new = kh.upsert_kit_todo(
+            notion_token, todo_db_id, name, notes, next_reach_out
+        )
+        if created_new:
+            print(f"[kit_sync] Created To-Do: Reach out to {name}")
+            created += 1
+
+    return created
 
 
-def parse_notion_date(prop: dict) -> Optional[datetime]:
-    d = prop.get("date")
-    if not d or not d.get("start"):
-        return None
-    s = d["start"]
-    if "T" in s:
-        dt = datetime.fromisoformat(s)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
-    return datetime.strptime(s, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-
-
-def extract_page_fields(page: dict) -> dict:
-    props = page["properties"]
-
-    def rich_text_value(key: str) -> str:
-        p = props.get(key, {})
-        t = p.get("title") or p.get("rich_text") or []
-        return "".join(item["plain_text"] for item in t)
-
-    def select_value(key: str) -> Optional[str]:
-        p = props.get(key, {})
-        sel = p.get("select")
-        return sel["name"] if sel else None
-
-    return {
-        "id": page["id"],
-        "name": rich_text_value("Name"),
-        "phone": (props.get("Phone") or {}).get("phone_number") or "",
-        "last_contact": parse_notion_date(props.get("Last Contact") or {}),
-        "reach_out_every": select_value("Reach Out Every"),
-    }
-
-
-def update_notion_page(
-    page_id: str,
-    last_contact: datetime,
-    next_reach_out: Optional[datetime],
-) -> None:
-    props = {
-        "Last Contact": {"date": {"start": last_contact.strftime("%Y-%m-%d")}},
-    }
-    if next_reach_out is not None:
-        props["Next Reach Out"] = {"date": {"start": next_reach_out.strftime("%Y-%m-%d")}}
-    notion_request("PATCH", f"/pages/{page_id}", {"properties": props})
-
+# ─── Main ────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    print(f"[kit_sync] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} — starting")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dry-run", action="store_true", help="Preview changes without writing to Notion")
+    args = parser.parse_args()
+    dry_run = args.dry_run
 
-    sent = get_sent_contacts(LOOKBACK_DAYS)
-    print(f"[kit_sync] {len(sent)} contacts with sent messages in last {LOOKBACK_DAYS} days")
+    mode = "[dry-run] " if dry_run else ""
+    print(f"[kit_sync] {mode}{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} — starting")
 
-    kit_pages = get_kit_records()
-    print(f"[kit_sync] {len(kit_pages)} KIT records loaded from Notion")
+    if not ANTHROPIC_KEY and not dry_run:
+        print("[kit_sync] WARNING: ANTHROPIC_API_KEY not set — summaries will be skipped")
 
-    updated = 0
-    for page in kit_pages:
-        fields = extract_page_fields(page)
-        if not fields["phone"]:
-            continue
+    # Copy chat.db to temp to avoid locking
+    tmp = tempfile.mktemp(suffix=".db")
+    shutil.copy2(CHAT_DB, tmp)
 
-        norm_kit = normalize_phone(fields["phone"])
-        if not norm_kit or norm_kit not in sent:
-            continue
+    try:
+        conn = sqlite3.connect(tmp)
 
-        new_last_contact = sent[norm_kit]
-        old_last_contact = fields["last_contact"]
+        sent = get_sent_contacts(LOOKBACK_DAYS, conn)
+        print(f"[kit_sync] {len(sent)} contacts with sent messages in last {LOOKBACK_DAYS} days")
 
-        if old_last_contact and new_last_contact.date() <= old_last_contact.date():
-            continue
+        kit_pages = kh.get_kit_records(NOTION_TOKEN)
+        print(f"[kit_sync] {len(kit_pages)} KIT records loaded from Notion")
 
-        interval = REACH_OUT_DAYS.get(fields["reach_out_every"] or "")
-        new_next: Optional[datetime] = None
-        if interval is not None:
-            new_next = (new_last_contact + timedelta(days=interval)).replace(
-                hour=0, minute=0, second=0, microsecond=0
+        kit_fields_list = [kh.extract_kit_fields(p) for p in kit_pages]
+
+        updated = 0
+        for fields in kit_fields_list:
+            if not fields["phone"]:
+                continue
+
+            norm_kit = kh.normalise_phone(fields["phone"])
+            if not norm_kit or norm_kit not in sent:
+                continue
+
+            new_last_contact = sent[norm_kit]
+            old_last_contact = fields["last_contact"]
+
+            if old_last_contact and new_last_contact.date() <= old_last_contact.date():
+                continue
+
+            # Collect conversation thread
+            thread_text = get_conversation_thread(
+                conn,
+                norm_kit,
+                old_last_contact,
+                new_last_contact,
+                dry_run=dry_run,
             )
 
-        update_notion_page(fields["id"], new_last_contact, new_next)
+            if dry_run:
+                preview_lines = thread_text.split("\n")[:3]
+                print(f"\n[kit_sync] [dry-run] Would update: {fields['name']}")
+                print(f"  Last Contact: {old_last_contact.strftime('%Y-%m-%d') if old_last_contact else 'none'} → {new_last_contact.strftime('%Y-%m-%d')}")
+                print(f"  Thread preview ({len(thread_text.split(chr(10)))} messages):")
+                for line in preview_lines:
+                    print(f"    {line}")
+                if len(thread_text.split("\n")) > 3:
+                    print("    ...")
+                continue
 
-        old_str = old_last_contact.strftime("%Y-%m-%d") if old_last_contact else "none"
-        new_str = new_last_contact.strftime("%Y-%m-%d")
-        next_str = new_next.strftime("%Y-%m-%d") if new_next else "unchanged"
-        print(
-            f"[kit_sync] Updated: {fields['name']}"
-            f" | Last Contact: {old_str} → {new_str}"
-            f" | Next Reach Out: {next_str}"
-        )
-        updated += 1
+            # Summarise with Claude
+            summary = ""
+            if ANTHROPIC_KEY and thread_text:
+                try:
+                    summary = kh.summarise_with_claude(
+                        ANTHROPIC_KEY, fields["name"], thread_text, "iMessage"
+                    )
+                except Exception as e:
+                    print(f"[kit_sync] WARNING: Claude summarisation failed for {fields['name']}: {e}")
 
-    print(f"[kit_sync] Done — {updated} record(s) updated")
+            # Compute next reach-out
+            next_reach_out = kh.compute_next_reach_out(new_last_contact, fields["reach_out_every"])
+
+            # Update Notion
+            updates = {
+                "last_contact": new_last_contact,
+                "last_method": "iMessage",
+            }
+            if next_reach_out:
+                updates["next_reach_out"] = next_reach_out
+            if summary:
+                updates["last_conversation"] = summary
+
+            kh.update_kit_record(NOTION_TOKEN, fields["id"], updates)
+
+            # Update To-Do task notes if it exists
+            if TODO_DB_ID and summary:
+                notes = kh.format_kit_todo_notes(
+                    new_last_contact, summary, "iMessage"
+                )
+                kh.upsert_kit_todo(
+                    NOTION_TOKEN, TODO_DB_ID, fields["name"], notes, next_reach_out
+                )
+
+            old_str = old_last_contact.strftime("%Y-%m-%d") if old_last_contact else "none"
+            new_str = new_last_contact.strftime("%Y-%m-%d")
+            next_str = next_reach_out.strftime("%Y-%m-%d") if next_reach_out else "unchanged"
+            summ_str = f" | Summary: {summary[:60]}…" if summary else ""
+            print(
+                f"[kit_sync] Updated: {fields['name']}"
+                f" | Last Contact: {old_str} → {new_str}"
+                f" | Next Reach Out: {next_str}"
+                f"{summ_str}"
+            )
+            updated += 1
+
+        conn.close()
+
+        if not dry_run:
+            # Create To-Do tasks for overdue contacts
+            todos = _create_overdue_todos(kit_fields_list, NOTION_TOKEN, TODO_DB_ID, dry_run)
+            print(f"[kit_sync] Done — {updated} record(s) updated, {todos} To-Do task(s) created")
+        else:
+            print(f"\n[kit_sync] [dry-run] Done — {updated} record(s) would be updated")
+
+    finally:
+        import os as _os
+        try:
+            _os.unlink(tmp)
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
