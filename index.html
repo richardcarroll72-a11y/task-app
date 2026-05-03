@@ -68,7 +68,8 @@
       margin-top: 2px;
     }
 
-    .btn-refresh {
+    .header-actions { display: flex; align-items: center; gap: 4px; justify-content: flex-end; }
+    .btn-icon {
       background: none;
       border: none;
       cursor: pointer;
@@ -76,10 +77,15 @@
       padding: 6px;
       border-radius: 8px;
       color: var(--muted);
+      text-decoration: none;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       transition: background 0.15s;
     }
-    .btn-refresh:hover { background: var(--bg); }
-    .btn-refresh.spinning { animation: spin 1s linear infinite; }
+    .btn-icon:hover { background: var(--bg); }
+    .btn-icon.spinning { animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .app-version { font-size: 0.65rem; color: var(--muted); opacity: 0.6; text-align: right; margin-top: 2px; }
 
@@ -700,7 +706,10 @@
       <div class="header-date" id="headerDate"></div>
     </div>
     <div>
-      <button class="btn-refresh" id="refreshBtn" title="Refresh" aria-label="Refresh tasks">↻</button>
+      <div class="header-actions">
+        <a class="btn-icon" href="/scan" title="Scan media" aria-label="Open barcode scanner">📷</a>
+        <button class="btn-icon" id="refreshBtn" title="Refresh" aria-label="Refresh tasks">↻</button>
+      </div>
       <div class="app-version">v2.1.0</div>
     </div>
   </div>
