@@ -366,7 +366,9 @@
   </div>
 
   <!-- Camera scanner -->
-  <div id="reader"></div>
+  <div id="reader">
+    <video id="readerVideo" playsinline muted autoplay></video>
+  </div>
 
   <!-- Reticle -->
   <div class="reticle" id="reticle" style="display:none;">
@@ -403,7 +405,7 @@
   <!-- Toast -->
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="https://unpkg.com/@zxing/browser@0.1.5/umd/zxing-browser.min.js"></script>
   <script>
     (function () {
       'use strict';
@@ -424,7 +426,8 @@
       const startBtn = document.getElementById('startBtn');
       const toast = document.getElementById('toast');
 
-      let scanner = null;
+      let codeReader = null;
+      let scannerControls = null;
       let busy = false;          // currently looking-up or showing result sheet
       let lastBarcode = null;    // dedupe rapid repeat reads
       let lastBarcodeAt = 0;
@@ -544,31 +547,22 @@
         startBtn.textContent = 'Starting camera…';
 
         try {
-          const formats = [
-            Html5QrcodeSupportedFormats.EAN_13,
-            Html5QrcodeSupportedFormats.EAN_8,
-            Html5QrcodeSupportedFormats.UPC_A,
-            Html5QrcodeSupportedFormats.UPC_E,
-            Html5QrcodeSupportedFormats.CODE_128,
-          ];
-          scanner = new Html5Qrcode('reader', { formatsToSupport: formats, verbose: false });
+          if (!window.ZXingBrowser) throw new Error('Scanner library failed to load');
 
-          // Wide rectangle scan area sized to the visual reticle — focused
-          // analysis is faster and more reliable than full-frame on mobile.
-          const config = {
-            fps: 10,
-            qrbox: (vw, vh) => {
-              const w = Math.floor(Math.min(vw, vh) * 0.85);
-              return { width: w, height: Math.floor(w * 0.5) };
-            },
-          };
+          codeReader = new ZXingBrowser.BrowserMultiFormatReader();
+          const videoEl = document.getElementById('readerVideo');
 
-          try {
-            await scanner.start({ facingMode: { exact: 'environment' } }, config, onScan, () => {});
-          } catch (_) {
-            // Some iOS versions don't honour `exact: environment`
-            await scanner.start({ facingMode: 'environment' }, config, onScan, () => {});
-          }
+          // null deviceId → @zxing/browser auto-picks the rear camera
+          // (it requests `facingMode: 'environment'` internally).
+          // The callback fires once per frame: result is null on misses,
+          // populated when a barcode is decoded.
+          scannerControls = await codeReader.decodeFromVideoDevice(
+            null,
+            videoEl,
+            (result) => {
+              if (result) onScan(result.getText());
+            }
+          );
 
           idleScreen.style.display = 'none';
           topbar.style.display = '';
@@ -611,7 +605,9 @@
 
       // Stop the camera if the user navigates away — saves battery
       window.addEventListener('pagehide', () => {
-        if (scanner) scanner.stop().catch(() => {});
+        if (scannerControls) {
+          try { scannerControls.stop(); } catch (_) {}
+        }
       });
     })();
   </script>
