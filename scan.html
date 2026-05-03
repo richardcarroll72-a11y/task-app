@@ -478,7 +478,7 @@
       }
 
       async function logMedia(status) {
-        if (!currentResult) return;
+        if (!currentResult) throw new Error('No item to log');
         const payload = {
           type: currentResult.type,
           title: currentResult.title,
@@ -585,9 +585,13 @@
           // disable both buttons while logging
           document.querySelectorAll('.sheet-actions .btn').forEach(b => b.disabled = true);
           try {
-            await logMedia(status);
+            const result = await logMedia(status);
             sheet.classList.remove('open');
-            showToast(status === 'started' ? 'Started — logged ✓' : 'Finished — logged ✓');
+            if (result?.discogs && result.discogs.ok === false) {
+              showToast(`Logged in Notion, Discogs failed: ${result.discogs.error}`, true);
+            } else {
+              showToast(status === 'started' ? 'Started — logged ✓' : 'Finished — logged ✓');
+            }
             currentResult = null;
             setTimeout(() => { busy = false; lastBarcode = null; }, 800);
           } catch (err) {
