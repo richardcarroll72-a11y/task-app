@@ -110,6 +110,39 @@
     .stat-chip.overdue { background: var(--red-light); border-color: #fecaca; color: var(--red); }
     .stat-num { font-size: 1rem; font-weight: 700; }
 
+    /* Header badge (KIT reach-out count) */
+    .header-badge {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 22px;
+      height: 22px;
+      padding: 0 6px;
+      border-radius: 11px;
+      background: var(--primary);
+      color: #fff;
+      font-size: 0.72rem;
+      font-weight: 700;
+      margin-right: 8px;
+      vertical-align: middle;
+      cursor: help;
+    }
+    .header-badge[hidden] { display: none; }
+
+    /* Reading queue stat line (above Articles section) */
+    .read-queue-line {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin: 0 0 6px 4px;
+      flex-wrap: wrap;
+    }
+    .read-queue-line .rq-num { font-weight: 700; color: var(--text); }
+    .read-queue-line .rq-sep { color: var(--border); }
+
     /* ── Main content ── */
     .main { padding: 16px 16px 0; max-width: 640px; margin: 0 auto; }
 
@@ -707,10 +740,11 @@
     </div>
     <div>
       <div class="header-actions">
+        <a id="kitBadge" class="header-badge" hidden title="Active 'Reach out to' tasks" href="https://www.notion.so/64204e6b365f836c83798111f9c55f5a" target="_blank" rel="noopener">👥 <span id="kitBadgeNum">0</span></a>
         <a class="btn-icon" href="/scan" title="Scan media" aria-label="Open barcode scanner">📷</a>
         <button class="btn-icon" id="refreshBtn" title="Refresh" aria-label="Refresh tasks">↻</button>
       </div>
-      <div class="app-version">v2.1.0</div>
+      <div class="app-version">v2.2.0</div>
     </div>
   </div>
   <div class="stats-bar">
@@ -945,12 +979,16 @@ $('taskDue').value = today;
 // ── State ────────────────────────────────────────────────────────────────────
 let tasks = [];
 let projectMap = {}; // keyed by Notion page ID
+let appStats = null; // { readBacklog, readCompletedThisWeek, kitReachOut }
 
 // ── Fetch tasks ──────────────────────────────────────────────────────────────
 async function loadTasks() {
   const btn = $('refreshBtn');
   btn.classList.add('spinning');
   hideError();
+
+  // Fire stats in parallel — it's independent of the main render path.
+  fetchStats();
 
   try {
     const [tasksRes, projectsRes] = await Promise.all([
@@ -992,6 +1030,40 @@ async function loadTasks() {
     $('spireBar').style.display = 'block';
     $('taskList').style.display = 'block';
     btn.classList.remove('spinning');
+  }
+}
+
+// ── Cross-section stats (reading queue + KIT badge) ──────────────────────────
+async function fetchStats() {
+  try {
+    const res = await fetch(`/api/stats?clientDate=${today}`);
+    if (!res.ok) return;
+    appStats = await res.json();
+    applyStats();
+  } catch (err) {
+    console.error('stats fetch failed:', err);
+  }
+}
+
+function applyStats() {
+  if (!appStats) return;
+  // KIT badge in header
+  const badge = $('kitBadge');
+  if (badge) {
+    if (appStats.kitReachOut > 0) {
+      $('kitBadgeNum').textContent = appStats.kitReachOut;
+      badge.hidden = false;
+    } else {
+      badge.hidden = true;
+    }
+  }
+  // Reading queue line — only visible if there's an Articles section rendered
+  const line = document.getElementById('readQueueLine');
+  if (line) {
+    line.innerHTML =
+      `<span><span class="rq-num">${appStats.readBacklog}</span> in backlog</span>` +
+      `<span class="rq-sep">·</span>` +
+      `<span><span class="rq-num">${appStats.readCompletedThisWeek}</span> read this week</span>`;
   }
 }
 
@@ -1095,6 +1167,7 @@ function renderTasks() {
 
   if (articleTasks.length > 0) {
     html += `<div class="section-label">📰 Articles (${articleTasks.length})</div>`;
+    html += `<div class="read-queue-line" id="readQueueLine"></div>`;
     html += articleTasks.map(t => articleCard(t)).join('');
   }
 
@@ -1108,6 +1181,7 @@ function renderTasks() {
   </a>`;
 
   list.innerHTML = html;
+  applyStats();
 
   // Attach complete listeners
   list.querySelectorAll('.check-btn:not(.subtask-check)').forEach(btn => {
