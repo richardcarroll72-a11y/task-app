@@ -346,6 +346,41 @@
     }
     .error-bar.visible { display: block; }
 
+    /* ── Health nudge banner ── */
+    .health-nudge {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      margin-bottom: 12px;
+      border: 1px solid transparent;
+    }
+    .health-nudge.visible { display: flex; }
+    .health-nudge.moderate {
+      background: var(--yellow-light);
+      border-color: #fde68a;
+      color: #92400e;
+    }
+    .health-nudge.low {
+      background: var(--red-light);
+      border-color: #fecaca;
+      color: #991b1b;
+    }
+    .health-nudge .health-text { flex: 1; line-height: 1.35; }
+    .health-nudge .health-dismiss {
+      background: none;
+      border: none;
+      color: inherit;
+      opacity: 0.6;
+      cursor: pointer;
+      font-size: 1.1rem;
+      padding: 0 4px;
+      line-height: 1;
+    }
+    .health-nudge .health-dismiss:hover { opacity: 1; }
+
     /* ── Offline banner ── */
     .offline-bar {
       background: #fef3c7;
@@ -779,6 +814,10 @@
 
 <main class="main">
   <div class="error-bar" id="errorBar"></div>
+  <div class="health-nudge" id="healthNudge" role="status" aria-live="polite">
+    <span class="health-text" id="healthNudgeText"></span>
+    <button class="health-dismiss" id="healthNudgeDismiss" aria-label="Dismiss">×</button>
+  </div>
 
   <div id="loadingState">
     <!-- Skeleton cards -->
@@ -1851,8 +1890,45 @@ function showToast(msg, ms = 3000) {
   _toastTimer = setTimeout(() => el.classList.remove('show'), ms);
 }
 
+// ── Health nudge banner ──────────────────────────────────────────────────────
+const HEALTH_DISMISS_KEY = 'healthNudgeDismissedDate';
+
+async function checkHealthNudge() {
+  // Skip if already dismissed today
+  if (localStorage.getItem(HEALTH_DISMISS_KEY) === today) return;
+
+  try {
+    const res = await fetch(`/api/health?clientDate=${today}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data || data.readiness == null) return;
+
+    if (data.level === 'moderate') {
+      showHealthNudge('moderate', `Moderate readiness (${data.readiness}) — consider lighter tasks today`);
+    } else if (data.level === 'low') {
+      showHealthNudge('low', `Low readiness (${data.readiness}) — prioritise rest and quick wins`);
+    }
+    // 70+ → no banner
+  } catch (err) {
+    console.error('health check failed:', err);
+  }
+}
+
+function showHealthNudge(level, msg) {
+  const el = $('healthNudge');
+  el.classList.remove('moderate', 'low');
+  el.classList.add(level, 'visible');
+  $('healthNudgeText').textContent = msg;
+}
+
+$('healthNudgeDismiss').addEventListener('click', () => {
+  $('healthNudge').classList.remove('visible');
+  localStorage.setItem(HEALTH_DISMISS_KEY, today);
+});
+
 // ── Init ─────────────────────────────────────────────────────────────────────
 loadTasks();
+checkHealthNudge();
 </script>
 </body>
 </html>
