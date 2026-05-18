@@ -624,6 +624,24 @@
     }
     .article-open:hover { opacity: 0.82; }
 
+    /* Source/domain label on Read: cards */
+    .source-label {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--muted);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 2px 7px;
+      margin-bottom: 6px;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+
     /* ── Relationship notes ── */
     .relationship-notes {
       font-size: 0.82rem;
@@ -1274,10 +1292,18 @@ function articleCard(task) {
     ? `<a class="article-open" href="${escHtml(task.articleUrl)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Open →</a>`
     : '';
 
+  // Source label: prefer Link/URL property, fall back to first URL in notes
+  const urlFromNotes = (task.notes && task.notes.match(/https?:\/\/[^\s\n]+/)?.[0]) || null;
+  const source = sourceLabel(task.articleUrl || urlFromNotes);
+  const sourceTag = source
+    ? `<span class="source-label" title="${escHtml(source)}">${escHtml(source)}</span>`
+    : '';
+
   return `
     <div class="article-card" data-id="${task.id}">
       <button class="check-btn" data-id="${task.id}" title="Mark complete" aria-label="Mark '${escHtml(task.name)}' complete"></button>
       <div class="article-body">
+        ${sourceTag}
         <div class="article-title">${escHtml(title)}</div>
         ${openBtn}
       </div>
@@ -1466,6 +1492,45 @@ async function completeSubtask(subtaskId, parentId) {
 
   fetch(`/api/tasks?id=${encodeURIComponent(subtaskId)}&clientDate=${today}`, { method: 'PATCH' })
     .catch(console.error);
+}
+
+// Pretty-print a URL's source: known domains map to a brand label,
+// otherwise return the hostname with leading "www." stripped.
+const SOURCE_BRANDS = {
+  'pluralistic.net':       'Pluralistic',
+  'nytimes.com':           'NYT',
+  'theguardian.com':       'Guardian',
+  'theatlantic.com':       'The Atlantic',
+  'newyorker.com':         'New Yorker',
+  'arstechnica.com':       'Ars Technica',
+  'theverge.com':          'The Verge',
+  'bloomberg.com':         'Bloomberg',
+  'wsj.com':               'WSJ',
+  'washingtonpost.com':    'WaPo',
+  'ft.com':                'FT',
+  'economist.com':         'Economist',
+  'wired.com':             'Wired',
+  'substack.com':          'Substack',
+  'medium.com':            'Medium',
+  'youtube.com':           'YouTube',
+  'youtu.be':              'YouTube',
+  'github.com':            'GitHub',
+};
+function sourceLabel(url) {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    const host = u.hostname.replace(/^www\./, '');
+    if (SOURCE_BRANDS[host]) return SOURCE_BRANDS[host];
+    // Substack newsletters: <name>.substack.com → "<name> (Substack)"
+    if (host.endsWith('.substack.com')) {
+      const name = host.replace('.substack.com', '');
+      return `${name.charAt(0).toUpperCase()}${name.slice(1)} (Substack)`;
+    }
+    return host;
+  } catch {
+    return null;
+  }
 }
 
 function escHtml(str) {
