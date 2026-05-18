@@ -110,6 +110,39 @@
     .stat-chip.overdue { background: var(--red-light); border-color: #fecaca; color: var(--red); }
     .stat-num { font-size: 1rem; font-weight: 700; }
 
+    /* Header badge (KIT reach-out count) */
+    .header-badge {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 22px;
+      height: 22px;
+      padding: 0 6px;
+      border-radius: 11px;
+      background: var(--primary);
+      color: #fff;
+      font-size: 0.72rem;
+      font-weight: 700;
+      margin-right: 8px;
+      vertical-align: middle;
+      cursor: help;
+    }
+    .header-badge[hidden] { display: none; }
+
+    /* Reading queue stat line (above Articles section) */
+    .read-queue-line {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin: 0 0 6px 4px;
+      flex-wrap: wrap;
+    }
+    .read-queue-line .rq-num { font-weight: 700; color: var(--text); }
+    .read-queue-line .rq-sep { color: var(--border); }
+
     /* ── Main content ── */
     .main { padding: 16px 16px 0; max-width: 640px; margin: 0 auto; }
 
@@ -313,6 +346,41 @@
     }
     .error-bar.visible { display: block; }
 
+    /* ── Health nudge banner ── */
+    .health-nudge {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      margin-bottom: 12px;
+      border: 1px solid transparent;
+    }
+    .health-nudge.visible { display: flex; }
+    .health-nudge.moderate {
+      background: var(--yellow-light);
+      border-color: #fde68a;
+      color: #92400e;
+    }
+    .health-nudge.low {
+      background: var(--red-light);
+      border-color: #fecaca;
+      color: #991b1b;
+    }
+    .health-nudge .health-text { flex: 1; line-height: 1.35; }
+    .health-nudge .health-dismiss {
+      background: none;
+      border: none;
+      color: inherit;
+      opacity: 0.6;
+      cursor: pointer;
+      font-size: 1.1rem;
+      padding: 0 4px;
+      line-height: 1;
+    }
+    .health-nudge .health-dismiss:hover { opacity: 1; }
+
     /* ── Offline banner ── */
     .offline-bar {
       background: #fef3c7;
@@ -324,6 +392,49 @@
       display: none;
     }
     .offline-bar.visible { display: block; }
+
+    /* ── Transcode status widget ── */
+    .transcode-widget {
+      max-width: 640px;
+      margin: 24px auto 16px;
+      padding: 0 16px;
+    }
+    .transcode-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .transcode-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      cursor: pointer;
+      user-select: none;
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .transcode-header:hover { background: rgba(0,0,0,0.02); }
+    .transcode-header .tw-title { flex: 1; }
+    .transcode-header .tw-chevron { font-size: 0.7rem; }
+    .transcode-body {
+      padding: 0 14px 12px;
+      font-size: 0.82rem;
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .transcode-body.collapsed { display: none; }
+    .transcode-body .tw-row { display: flex; gap: 6px; }
+    .transcode-body .tw-label {
+      color: var(--muted);
+      min-width: 80px;
+      font-size: 0.75rem;
+    }
+    .transcode-body .tw-val { flex: 1; word-break: break-word; }
+    .transcode-body .tw-unavailable { color: var(--muted); font-style: italic; }
 
     /* ── FAB (add button) ── */
     .fab {
@@ -550,6 +661,61 @@
     .park-btn:hover { border-color: #818cf8; background: #eef2ff; }
     .park-btn:active { opacity: 0.7; }
 
+    /* Move-to button (shares park-btn shape) */
+    .move-btn {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      background: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 1px;
+      font-size: 0.75rem;
+      line-height: 1;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .move-btn:hover { border-color: #14b8a6; background: #ccfbf1; }
+    .move-btn:active { opacity: 0.7; }
+
+    /* Move-to modal target options */
+    .move-targets {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .move-target {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      background: var(--card);
+      cursor: pointer;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text);
+      text-align: left;
+      width: 100%;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .move-target:hover { border-color: var(--primary); background: var(--primary-light); }
+    .move-target:active { opacity: 0.8; }
+    .move-target .mt-emoji { font-size: 1.3rem; }
+    .move-target-task-name {
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      background: var(--bg);
+      border-radius: 8px;
+      word-break: break-word;
+    }
+
     /* ── Article card ── */
     .article-card {
       background: var(--card);
@@ -590,6 +756,24 @@
       transition: opacity 0.15s;
     }
     .article-open:hover { opacity: 0.82; }
+
+    /* Source/domain label on Read: cards */
+    .source-label {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--muted);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 2px 7px;
+      margin-bottom: 6px;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      vertical-align: middle;
+    }
 
     /* ── Relationship notes ── */
     .relationship-notes {
@@ -707,10 +891,11 @@
     </div>
     <div>
       <div class="header-actions">
+        <a id="kitBadge" class="header-badge" hidden title="Active 'Reach out to' tasks" href="https://www.notion.so/64204e6b365f836c83798111f9c55f5a" target="_blank" rel="noopener">👥 <span id="kitBadgeNum">0</span></a>
         <a class="btn-icon" href="/scan" title="Scan media" aria-label="Open barcode scanner">📷</a>
         <button class="btn-icon" id="refreshBtn" title="Refresh" aria-label="Refresh tasks">↻</button>
       </div>
-      <div class="app-version">v2.1.0</div>
+      <div class="app-version">v2.2.0</div>
     </div>
   </div>
   <div class="stats-bar">
@@ -727,6 +912,10 @@
 
 <main class="main">
   <div class="error-bar" id="errorBar"></div>
+  <div class="health-nudge" id="healthNudge" role="status" aria-live="polite">
+    <span class="health-text" id="healthNudgeText"></span>
+    <button class="health-dismiss" id="healthNudgeDismiss" aria-label="Dismiss">×</button>
+  </div>
 
   <div id="loadingState">
     <!-- Skeleton cards -->
@@ -744,6 +933,17 @@
   <div id="spireBar" style="display:none"></div>
   <div id="taskList" style="display:none"></div>
 </main>
+
+<div class="transcode-widget" id="transcodeWidget" hidden>
+  <div class="transcode-card">
+    <div class="transcode-header" id="transcodeHeader">
+      <span>🎬</span>
+      <span class="tw-title">Transcode status</span>
+      <span class="tw-chevron" id="transcodeChevron">▸</span>
+    </div>
+    <div class="transcode-body collapsed" id="transcodeBody"></div>
+  </div>
+</div>
 
 <button class="fab" id="addBtn" title="Add task" aria-label="Add new task">+</button>
 
@@ -817,6 +1017,27 @@
     <div class="form-actions">
       <button type="button" class="btn btn-secondary" id="fpCancelBtn">Cancel</button>
       <button type="button" class="btn btn-primary" id="fpSubmitBtn">Park It 🚀</button>
+    </div>
+  </div>
+</div>
+
+<!-- Move-to Modal -->
+<div class="modal-overlay" id="moveModalOverlay" role="dialog" aria-modal="true" aria-label="Move task to another list">
+  <div class="modal">
+    <h2>↪ Move to…</h2>
+    <div class="move-target-task-name" id="moveTaskName">Task name</div>
+    <div class="move-targets">
+      <button type="button" class="move-target" data-target="buy">
+        <span class="mt-emoji">🛒</span>
+        <span>To Buy</span>
+      </button>
+      <button type="button" class="move-target" data-target="visit">
+        <span class="mt-emoji">📍</span>
+        <span>To Visit</span>
+      </button>
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn btn-secondary" id="moveCancelBtn">Cancel</button>
     </div>
   </div>
 </div>
@@ -945,12 +1166,16 @@ $('taskDue').value = today;
 // ── State ────────────────────────────────────────────────────────────────────
 let tasks = [];
 let projectMap = {}; // keyed by Notion page ID
+let appStats = null; // { readBacklog, readCompletedThisWeek, kitReachOut }
 
 // ── Fetch tasks ──────────────────────────────────────────────────────────────
 async function loadTasks() {
   const btn = $('refreshBtn');
   btn.classList.add('spinning');
   hideError();
+
+  // Fire stats in parallel — it's independent of the main render path.
+  fetchStats();
 
   try {
     const [tasksRes, projectsRes] = await Promise.all([
@@ -992,6 +1217,40 @@ async function loadTasks() {
     $('spireBar').style.display = 'block';
     $('taskList').style.display = 'block';
     btn.classList.remove('spinning');
+  }
+}
+
+// ── Cross-section stats (reading queue + KIT badge) ──────────────────────────
+async function fetchStats() {
+  try {
+    const res = await fetch(`/api/stats?clientDate=${today}`);
+    if (!res.ok) return;
+    appStats = await res.json();
+    applyStats();
+  } catch (err) {
+    console.error('stats fetch failed:', err);
+  }
+}
+
+function applyStats() {
+  if (!appStats) return;
+  // KIT badge in header
+  const badge = $('kitBadge');
+  if (badge) {
+    if (appStats.kitReachOut > 0) {
+      $('kitBadgeNum').textContent = appStats.kitReachOut;
+      badge.hidden = false;
+    } else {
+      badge.hidden = true;
+    }
+  }
+  // Reading queue line — only visible if there's an Articles section rendered
+  const line = document.getElementById('readQueueLine');
+  if (line) {
+    line.innerHTML =
+      `<span><span class="rq-num">${appStats.readBacklog}</span> in backlog</span>` +
+      `<span class="rq-sep">·</span>` +
+      `<span><span class="rq-num">${appStats.readCompletedThisWeek}</span> read this week</span>`;
   }
 }
 
@@ -1095,6 +1354,7 @@ function renderTasks() {
 
   if (articleTasks.length > 0) {
     html += `<div class="section-label">📰 Articles (${articleTasks.length})</div>`;
+    html += `<div class="read-queue-line" id="readQueueLine"></div>`;
     html += articleTasks.map(t => articleCard(t)).join('');
   }
 
@@ -1108,6 +1368,7 @@ function renderTasks() {
   </a>`;
 
   list.innerHTML = html;
+  applyStats();
 
   // Attach complete listeners
   list.querySelectorAll('.check-btn:not(.subtask-check)').forEach(btn => {
@@ -1134,6 +1395,14 @@ function renderTasks() {
         btn.dataset.priority, JSON.parse(btn.dataset.project || '[]'),
         btn.dataset.dueDate, btn.dataset.articleUrl
       );
+    });
+  });
+
+  // Attach move listeners
+  list.querySelectorAll('.move-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      openMoveModal(btn.dataset.id, btn.dataset.name, btn.dataset.notes);
     });
   });
 }
@@ -1186,6 +1455,7 @@ function taskCard(task, isLater = false, isOverdue = false) {
       </div>
       <div class="card-right">
         <button class="park-btn" data-id="${task.id}" data-name="${escHtml(task.name)}" data-url="${escHtml(task.url || '')}" data-notes="${escHtml(task.notes || '')}" data-priority="${escHtml(task.priority || '')}" data-project="[]" data-due-date="${escHtml(task.dueDate || '')}" data-article-url="${escHtml(task.articleUrl || '')}" title="Park as Future Project" aria-label="Park '${task.name}' as Future Project">🚀</button>
+        <button class="move-btn" data-id="${task.id}" data-name="${escHtml(task.name)}" data-notes="${escHtml(task.notes || '')}" title="Move to…" aria-label="Move '${task.name}' to another list">↪</button>
         ${spireBadge}
       </div>
     </div>`;
@@ -1200,10 +1470,18 @@ function articleCard(task) {
     ? `<a class="article-open" href="${escHtml(task.articleUrl)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Open →</a>`
     : '';
 
+  // Source label: prefer Link/URL property, fall back to first URL in notes
+  const urlFromNotes = (task.notes && task.notes.match(/https?:\/\/[^\s\n]+/)?.[0]) || null;
+  const source = sourceLabel(task.articleUrl || urlFromNotes);
+  const sourceTag = source
+    ? `<span class="source-label" title="${escHtml(source)}">${escHtml(source)}</span>`
+    : '';
+
   return `
     <div class="article-card" data-id="${task.id}">
       <button class="check-btn" data-id="${task.id}" title="Mark complete" aria-label="Mark '${escHtml(task.name)}' complete"></button>
       <div class="article-body">
+        ${sourceTag}
         <div class="article-title">${escHtml(title)}</div>
         ${openBtn}
       </div>
@@ -1394,6 +1672,45 @@ async function completeSubtask(subtaskId, parentId) {
     .catch(console.error);
 }
 
+// Pretty-print a URL's source: known domains map to a brand label,
+// otherwise return the hostname with leading "www." stripped.
+const SOURCE_BRANDS = {
+  'pluralistic.net':       'Pluralistic',
+  'nytimes.com':           'NYT',
+  'theguardian.com':       'Guardian',
+  'theatlantic.com':       'The Atlantic',
+  'newyorker.com':         'New Yorker',
+  'arstechnica.com':       'Ars Technica',
+  'theverge.com':          'The Verge',
+  'bloomberg.com':         'Bloomberg',
+  'wsj.com':               'WSJ',
+  'washingtonpost.com':    'WaPo',
+  'ft.com':                'FT',
+  'economist.com':         'Economist',
+  'wired.com':             'Wired',
+  'substack.com':          'Substack',
+  'medium.com':            'Medium',
+  'youtube.com':           'YouTube',
+  'youtu.be':              'YouTube',
+  'github.com':            'GitHub',
+};
+function sourceLabel(url) {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    const host = u.hostname.replace(/^www\./, '');
+    if (SOURCE_BRANDS[host]) return SOURCE_BRANDS[host];
+    // Substack newsletters: <name>.substack.com → "<name> (Substack)"
+    if (host.endsWith('.substack.com')) {
+      const name = host.replace('.substack.com', '');
+      return `${name.charAt(0).toUpperCase()}${name.slice(1)} (Substack)`;
+    }
+    return host;
+  } catch {
+    return null;
+  }
+}
+
 function escHtml(str) {
   return String(str)
     .replace(/&/g, '&amp;')
@@ -1476,7 +1793,7 @@ $('modalOverlay').addEventListener('click', e => {
 });
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeModal(); closeParkModal(); }
+  if (e.key === 'Escape') { closeModal(); closeParkModal(); closeMoveModal(); }
 });
 
 $('addForm').addEventListener('submit', async e => {
@@ -1702,6 +2019,81 @@ $('fpSubmitBtn').addEventListener('click', async () => {
   }
 });
 
+// ── Move-to modal ────────────────────────────────────────────────────────────
+let _moveTaskId = null;
+let _moveTaskName = null;
+let _moveTaskNotes = null;
+
+function openMoveModal(taskId, taskName, taskNotes) {
+  _moveTaskId = taskId;
+  _moveTaskName = taskName;
+  _moveTaskNotes = taskNotes || '';
+  $('moveTaskName').textContent = taskName;
+  document.querySelectorAll('#moveModalOverlay .move-target').forEach(b => { b.disabled = false; });
+  $('moveModalOverlay').classList.add('open');
+}
+
+function closeMoveModal() {
+  $('moveModalOverlay').classList.remove('open');
+  _moveTaskId = null;
+  _moveTaskName = null;
+  _moveTaskNotes = null;
+}
+
+$('moveCancelBtn').addEventListener('click', closeMoveModal);
+$('moveModalOverlay').addEventListener('click', e => {
+  if (e.target === $('moveModalOverlay')) closeMoveModal();
+});
+
+document.querySelectorAll('#moveModalOverlay .move-target').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const target = btn.dataset.target;
+    if (!_moveTaskId || !target) return;
+
+    const taskId = _moveTaskId;
+    const name = _moveTaskName;
+    const notes = _moveTaskNotes;
+
+    // Disable buttons during request
+    document.querySelectorAll('#moveModalOverlay .move-target').forEach(b => { b.disabled = true; });
+
+    // Optimistic: fade out the source card
+    const card = document.querySelector(`.task-card[data-id="${taskId}"]`);
+    if (card) {
+      card.style.transition = 'opacity 0.3s';
+      card.style.opacity = '0';
+    }
+
+    closeMoveModal();
+
+    try {
+      const res = await fetch('/api/move-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId, target, name, notes, clientDate: today }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        tasks = tasks.filter(t => t.id !== taskId);
+        const todayCount = tasks.filter(t => ['today','later-today'].includes(getTaskBucket(t.dueDate))).length;
+        const overdueCount = tasks.filter(t => getTaskBucket(t.dueDate) === 'overdue').length;
+        $('statToday').textContent = todayCount;
+        $('statOverdue').textContent = overdueCount;
+        renderTasks();
+        showToast(`Moved to ${data.targetLabel} ✓`);
+      } else {
+        if (card && card.isConnected) card.style.opacity = '1';
+        showToast(data.error || 'Move failed — try again', 4000);
+      }
+    } catch (err) {
+      console.error('move-task error:', err);
+      if (card && card.isConnected) card.style.opacity = '1';
+      showToast('Move failed — try again');
+    }
+  });
+});
+
 // ── Toast ─────────────────────────────────────────────────────────────────────
 let _toastTimer = null;
 function showToast(msg, ms = 3000) {
@@ -1712,8 +2104,83 @@ function showToast(msg, ms = 3000) {
   _toastTimer = setTimeout(() => el.classList.remove('show'), ms);
 }
 
+// ── Health nudge banner ──────────────────────────────────────────────────────
+const HEALTH_DISMISS_KEY = 'healthNudgeDismissedDate';
+
+async function checkHealthNudge() {
+  // Skip if already dismissed today
+  if (localStorage.getItem(HEALTH_DISMISS_KEY) === today) return;
+
+  try {
+    const res = await fetch(`/api/health?clientDate=${today}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data || data.readiness == null) return;
+
+    if (data.level === 'moderate') {
+      showHealthNudge('moderate', `Moderate readiness (${data.readiness}) — consider lighter tasks today`);
+    } else if (data.level === 'low') {
+      showHealthNudge('low', `Low readiness (${data.readiness}) — prioritise rest and quick wins`);
+    }
+    // 70+ → no banner
+  } catch (err) {
+    console.error('health check failed:', err);
+  }
+}
+
+function showHealthNudge(level, msg) {
+  const el = $('healthNudge');
+  el.classList.remove('moderate', 'low');
+  el.classList.add(level, 'visible');
+  $('healthNudgeText').textContent = msg;
+}
+
+$('healthNudgeDismiss').addEventListener('click', () => {
+  $('healthNudge').classList.remove('visible');
+  localStorage.setItem(HEALTH_DISMISS_KEY, today);
+});
+
+// ── Transcode status widget ──────────────────────────────────────────────────
+async function loadTranscodeStatus() {
+  try {
+    const res = await fetch('/api/transcode');
+    if (!res.ok) return; // stay hidden
+    const data = await res.json();
+
+    const body = $('transcodeBody');
+    if (!data.available) {
+      body.innerHTML = `<div class="tw-unavailable">Status unavailable</div>`;
+    } else if (data.source === 'db') {
+      const enc = data.encoding
+        ? `<div class="tw-row"><span class="tw-label">Encoding</span><span class="tw-val">${escHtml(data.encoding.title || '—')}</span></div>`
+        : `<div class="tw-row"><span class="tw-label">Encoding</span><span class="tw-val tw-unavailable">nothing right now</span></div>`;
+      const queue = `<div class="tw-row"><span class="tw-label">Queue</span><span class="tw-val">${data.queueCount} ${data.queueCount === 1 ? 'item' : 'items'}</span></div>`;
+      const last = data.lastCompleted
+        ? `<div class="tw-row"><span class="tw-label">Last done</span><span class="tw-val">${escHtml(data.lastCompleted.title || '—')}</span></div>`
+        : '';
+      body.innerHTML = enc + queue + last;
+    } else {
+      // page fallback — show whatever text we got
+      const lines = (data.lines || []).map(l => `<div class="tw-val">${escHtml(l)}</div>`).join('');
+      body.innerHTML = lines || `<div class="tw-unavailable">No status info on page</div>`;
+    }
+
+    $('transcodeWidget').hidden = false;
+  } catch (err) {
+    console.error('transcode fetch failed:', err);
+  }
+}
+
+$('transcodeHeader').addEventListener('click', () => {
+  const body = $('transcodeBody');
+  const collapsed = body.classList.toggle('collapsed');
+  $('transcodeChevron').textContent = collapsed ? '▸' : '▾';
+});
+
 // ── Init ─────────────────────────────────────────────────────────────────────
 loadTasks();
+checkHealthNudge();
+loadTranscodeStatus();
 </script>
 </body>
 </html>
