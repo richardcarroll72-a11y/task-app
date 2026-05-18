@@ -1,13 +1,14 @@
-// Vercel Serverless Function — recent transcodes
+// Vercel Serverless Function — transcode status
 // GET /api/transcode
 //
-// Reads the Notion "Transcode Log" database (or a page) configured via
-// TRANSCODE_PAGE_ID. The transcode pipeline itself runs on a VM; Notion
-// only stores the post-hoc log, so this surfaces recent completed encodes
-// rather than live queue/encoding state.
+// TRANSCODE_PAGE_ID may point at either:
+//   • a Notion DATABASE → "Transcode Log" (post-hoc completed encodes)
+//   • a Notion PAGE     → "Transcode Live Status" (paragraph per VM,
+//     written live by the VM scripts after each encode)
 //
 // Response shapes:
 //   { available: true, source: 'log',  recent: [...], total }
+//   { available: true, source: 'live-status', vms: [...] }
 //   { available: true, source: 'page', title, lines: [string, ...] }
 //   { available: false, reason }
 
@@ -46,18 +47,31 @@ function titleText(props) {
   return '';
 }
 
-async function readBlocks(pageId) {
-  const r = await fetchNotion(`/blocks/${pageId}/children?page_size=20`);
-  if (!r.ok) return [];
-  const lines = [];
+async function readParagraphs(pageId) {
+  const r = await fetchNotion(`/blocks/${pageId}/children?page_size=25`);
+  if (!r.ok) return { blocks: [], ok: false };
+  const blocks = [];
   for (const b of r.body.results || []) {
-    const t = b[b.type];
-    if (!t || !t.rich_text) continue;
-    const text = t.rich_text.map(x => x.plain_text || '').join('').trim();
-    if (text) lines.push(text);
-    if (lines.length >= 5) break;
+    if (b.type !== 'paragraph') continue;
+    const rt = b.paragraph?.rich_text || [];
+    const text = rt.map(x => x.plain_text || '').join('').trim();
+    blocks.push({ id: b.id, text, lastEdited: b.last_edited_time || null });
   }
-  return lines;
+  return { blocks, ok: true };
+}
+
+// Parse "[VM_NAME] | Encoding: <file> | Queue: <N> remaining | Last: <show> at <ts>"
+function parseStatusLine(text) {
+  if (!text) return null;
+  const m = text.match(/^\[([^\]]+)\]\s*\|\s*Encoding:\s*(.*?)\s*\|\s*Queue:\s*(\d+)(?:\s*remaining)?\s*\|\s*Last:\s*(.*?)\s+at\s+(.+)$/);
+  if (!m) return null;
+  return {
+    vmName: m[1].trim(),
+    currentFile: m[2].trim(),
+    queueCount: parseInt(m[3], 10),
+    lastCompleted: m[4].trim(),
+    updatedAt: m[5].trim(),
+  };
 }
 
 module.exports = async (req, res) => {
@@ -113,14 +127,35 @@ module.exports = async (req, res) => {
       return res.status(200).json({ available: false, reason: `page ${pageRes.status}` });
     }
     const title = titleText(pageRes.body.properties || {});
-    const lines = await readBlocks(ID);
+    const { blocks } = await readParagraphs(ID);
 
-    res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
+    const vms = [];
+    const unparsed = [];
+    for (const b of blocks) {
+      const parsed = parseStatusLine(b.text);
+      if (parsed) {
+        vms.push({ ...parsed, blockUpdatedAt: b.lastEdited });
+      } else if (b.text) {
+        unparsed.push(b.text);
+      }
+    }
+
+    res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=120');
+
+    if (vms.length > 0) {
+      return res.status(200).json({
+        available: true,
+        source: 'live-status',
+        title,
+        vms,
+      });
+    }
+
     return res.status(200).json({
       available: true,
       source: 'page',
       title,
-      lines,
+      lines: unparsed.slice(0, 5),
     });
   } catch (err) {
     console.error('transcode error:', err);

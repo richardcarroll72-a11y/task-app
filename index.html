@@ -938,7 +938,7 @@
   <div class="transcode-card">
     <div class="transcode-header" id="transcodeHeader">
       <span>🎬</span>
-      <span class="tw-title">Recent transcodes</span>
+      <span class="tw-title" id="transcodeTitle">Transcode status</span>
       <span class="tw-chevron" id="transcodeChevron">▸</span>
     </div>
     <div class="transcode-body collapsed" id="transcodeBody"></div>
@@ -2148,8 +2148,26 @@ async function loadTranscodeStatus() {
     const data = await res.json();
 
     const body = $('transcodeBody');
+    const titleEl = $('transcodeTitle');
+    if (titleEl) {
+      titleEl.textContent = data.source === 'live-status' ? 'Transcode live status'
+        : data.source === 'log' ? 'Recent transcodes'
+        : 'Transcode status';
+    }
     if (!data.available) {
       body.innerHTML = `<div class="tw-unavailable">Status unavailable</div>`;
+    } else if (data.source === 'live-status') {
+      const rows = (data.vms || []).map(vm => {
+        const encoding = vm.currentFile && vm.currentFile !== 'idle'
+          ? `<strong>${escHtml(vm.currentFile)}</strong>`
+          : `<span class="tw-unavailable">idle</span>`;
+        const qLabel = `${vm.queueCount ?? 0} left`;
+        const last = vm.lastCompleted && vm.lastCompleted !== '—'
+          ? `last: ${escHtml(vm.lastCompleted)}`
+          : '';
+        return `<div class="tw-row"><span class="tw-label">${escHtml(vm.vmName)}</span><span class="tw-val">${encoding} · ${escHtml(qLabel)}${last ? ' · ' + last : ''}</span></div>`;
+      }).join('');
+      body.innerHTML = rows || `<div class="tw-unavailable">No VM status yet</div>`;
     } else if (data.source === 'log') {
       const rows = (data.recent || []).map(r => {
         const label = r.date ? r.date.slice(0, 10) : '—';
