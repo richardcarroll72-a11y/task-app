@@ -938,7 +938,7 @@
   <div class="transcode-card">
     <div class="transcode-header" id="transcodeHeader">
       <span>🎬</span>
-      <span class="tw-title">Transcode status</span>
+      <span class="tw-title">Recent transcodes</span>
       <span class="tw-chevron" id="transcodeChevron">▸</span>
     </div>
     <div class="transcode-body collapsed" id="transcodeBody"></div>
@@ -2150,15 +2150,16 @@ async function loadTranscodeStatus() {
     const body = $('transcodeBody');
     if (!data.available) {
       body.innerHTML = `<div class="tw-unavailable">Status unavailable</div>`;
-    } else if (data.source === 'db') {
-      const enc = data.encoding
-        ? `<div class="tw-row"><span class="tw-label">Encoding</span><span class="tw-val">${escHtml(data.encoding.title || '—')}</span></div>`
-        : `<div class="tw-row"><span class="tw-label">Encoding</span><span class="tw-val tw-unavailable">nothing right now</span></div>`;
-      const queue = `<div class="tw-row"><span class="tw-label">Queue</span><span class="tw-val">${data.queueCount} ${data.queueCount === 1 ? 'item' : 'items'}</span></div>`;
-      const last = data.lastCompleted
-        ? `<div class="tw-row"><span class="tw-label">Last done</span><span class="tw-val">${escHtml(data.lastCompleted.title || '—')}</span></div>`
-        : '';
-      body.innerHTML = enc + queue + last;
+    } else if (data.source === 'log') {
+      const rows = (data.recent || []).map(r => {
+        const label = r.date ? r.date.slice(0, 10) : '—';
+        const parts = [];
+        if (r.title && r.title !== '—') parts.push(r.title);
+        else if (r.showMovie) parts.push(r.showMovie);
+        if (r.savings != null) parts.push(`saved ${Math.round(r.savings)}%`);
+        return `<div class="tw-row"><span class="tw-label">${escHtml(label)}</span><span class="tw-val">${escHtml(parts.join(' · ') || '—')}</span></div>`;
+      }).join('');
+      body.innerHTML = rows || `<div class="tw-unavailable">No transcodes logged</div>`;
     } else {
       // page fallback — show whatever text we got
       const lines = (data.lines || []).map(l => `<div class="tw-val">${escHtml(l)}</div>`).join('');

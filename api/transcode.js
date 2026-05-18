@@ -1,24 +1,21 @@
-// Vercel Serverless Function — transcode status
+// Vercel Serverless Function — recent transcodes
 // GET /api/transcode
 //
-// Reads from a Notion page OR database whose ID is configured via
-// TRANSCODE_PAGE_ID (default: f7db9b70cf994c6991891becc780db3d).
-// Auto-detects which it is, since the page URL the user pointed at could
-// be either. Returns a small summary the widget can render.
+// Reads the Notion "Transcode Log" database (or a page) configured via
+// TRANSCODE_PAGE_ID. The transcode pipeline itself runs on a VM; Notion
+// only stores the post-hoc log, so this surfaces recent completed encodes
+// rather than live queue/encoding state.
 //
 // Response shapes:
-//   { available: true, source: 'db',   encoding, queue, lastCompleted }
+//   { available: true, source: 'log',  recent: [...], total }
 //   { available: true, source: 'page', title, lines: [string, ...] }
 //   { available: false, reason }
 
 const NOTION_API = 'https://api.notion.com/v1';
 const NOTION_VERSION = '2022-06-28';
 
-const DEFAULT_TRANSCODE_ID = 'f7db9b70cf994c6991891becc780db3d';
-
-const ACTIVE_STATUSES = ['encoding', 'in progress', 'transcoding', 'running', 'active'];
-const QUEUED_STATUSES = ['queued', 'pending', 'waiting', 'not started', 'todo'];
-const DONE_STATUSES   = ['done', 'completed', 'finished', 'complete'];
+const DEFAULT_TRANSCODE_ID = 'b87c6d06d5e84a65913b9d45c811804f';
+const RECENT_LIMIT = 5;
 
 function notionHeaders() {
   return {
@@ -36,30 +33,17 @@ async function fetchNotion(path, options = {}) {
   return { ok: res.ok, status: res.status, body: await res.json().catch(() => ({})) };
 }
 
+function plainText(prop) {
+  if (!prop) return '';
+  const arr = prop.rich_text || prop.title || [];
+  return arr.map(t => t.plain_text || '').join('').trim();
+}
+
 function titleText(props) {
   for (const v of Object.values(props || {})) {
-    if (v.type === 'title') return (v.title || []).map(t => t.plain_text || '').join('').trim();
+    if (v?.type === 'title') return plainText(v);
   }
   return '';
-}
-
-function statusText(props) {
-  for (const v of Object.values(props || {})) {
-    if (v.type === 'status') return v.status?.name || '';
-    if (v.type === 'select' && /status/i.test(v.id || '')) return v.select?.name || '';
-  }
-  // Fallback: any select property named "Status"
-  if (props?.Status?.select?.name) return props.Status.select.name;
-  if (props?.Status?.status?.name) return props.Status.status.name;
-  return '';
-}
-
-function bucket(status) {
-  const s = (status || '').toLowerCase();
-  if (ACTIVE_STATUSES.some(x => s.includes(x))) return 'encoding';
-  if (QUEUED_STATUSES.some(x => s.includes(x))) return 'queued';
-  if (DONE_STATUSES.some(x => s.includes(x)))   return 'done';
-  return 'other';
 }
 
 async function readBlocks(pageId) {
@@ -91,7 +75,6 @@ module.exports = async (req, res) => {
   const ID = process.env.TRANSCODE_PAGE_ID || DEFAULT_TRANSCODE_ID;
 
   try {
-    // Try as a database first — that's where queue + status make sense.
     const dbRes = await fetchNotion(`/databases/${ID}`);
     if (dbRes.ok) {
       const q = await fetchNotion(`/databases/${ID}/query`, {
@@ -101,29 +84,30 @@ module.exports = async (req, res) => {
       if (!q.ok) {
         return res.status(200).json({ available: false, reason: `db query ${q.status}` });
       }
-      const rows = (q.body.results || []).map(p => ({
-        title: titleText(p.properties),
-        status: statusText(p.properties),
-        last_edited: p.last_edited_time,
-      }));
-
-      const encoding = rows.find(r => bucket(r.status) === 'encoding') || null;
-      const queue = rows.filter(r => bucket(r.status) === 'queued');
-      const done = rows
-        .filter(r => bucket(r.status) === 'done')
-        .sort((a, b) => (b.last_edited || '').localeCompare(a.last_edited || ''));
+      const rows = (q.body.results || []).map(p => {
+        const props = p.properties || {};
+        const show = plainText(props['Show / Movie']);
+        return {
+          title: titleText(props) || show || '—',
+          date: props.Date?.date?.start || null,
+          savings: props['Savings %']?.number ?? null,
+          vm: props.VM?.select?.name || null,
+          showMovie: show || null,
+          _sortKey: props.Date?.date?.start || p.created_time || '',
+        };
+      });
+      rows.sort((a, b) => (b._sortKey || '').localeCompare(a._sortKey || ''));
+      const recent = rows.slice(0, RECENT_LIMIT).map(({ _sortKey, ...rest }) => rest);
 
       res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
       return res.status(200).json({
         available: true,
-        source: 'db',
-        encoding: encoding ? { title: encoding.title, status: encoding.status } : null,
-        queueCount: queue.length,
-        lastCompleted: done[0] ? { title: done[0].title } : null,
+        source: 'log',
+        recent,
+        total: rows.length,
       });
     }
 
-    // Fall back to page: read title + first few text blocks
     const pageRes = await fetchNotion(`/pages/${ID}`);
     if (!pageRes.ok) {
       return res.status(200).json({ available: false, reason: `page ${pageRes.status}` });
