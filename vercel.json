@@ -36,6 +36,10 @@
     "api/move-task.js": {
       "memory": 128,
       "maxDuration": 15
+    },
+    "api/move-article.js": {
+      "memory": 128,
+      "maxDuration": 15
     }
   },
   "routes": [
@@ -74,6 +78,10 @@
     {
       "src": "/api/move-task",
       "dest": "/api/move-task.js"
+    },
+    {
+      "src": "/api/move-article",
+      "dest": "/api/move-article.js"
     },
     {
       "src": "/scan",
