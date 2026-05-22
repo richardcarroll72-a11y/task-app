@@ -544,6 +544,47 @@
     .park-btn:hover { border-color: #818cf8; background: #eef2ff; }
     .park-btn:active { opacity: 0.7; }
 
+    /* ── Move article button ── */
+    .move-article-btn {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      background: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 0.75rem;
+      line-height: 1;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .move-article-btn:hover { border-color: #818cf8; background: #eef2ff; }
+    .move-article-btn:active { opacity: 0.7; }
+
+    /* ── Destination picker ── */
+    .dest-picker {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .dest-btn {
+      width: 100%;
+      padding: 12px 16px;
+      border-radius: 10px;
+      border: 2px solid var(--border);
+      background: none;
+      cursor: pointer;
+      font-size: 0.92rem;
+      font-weight: 600;
+      text-align: left;
+      color: var(--text);
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .dest-btn:hover { border-color: var(--primary); background: var(--primary-light); }
+    .dest-btn.selected { border-color: var(--primary); background: var(--primary-light); color: var(--primary); }
+
     /* ── Article card ── */
     .article-card {
       background: var(--card);
@@ -665,8 +706,8 @@
 
     /* ── Desktop: center modals ── */
     @media (min-width: 641px) {
-      #fpModalOverlay { align-items: center; }
-      #fpModalOverlay .modal { border-radius: var(--radius); max-height: 85vh; overflow-y: auto; }
+      #fpModalOverlay, #moveArticleModalOverlay { align-items: center; }
+      #fpModalOverlay .modal, #moveArticleModalOverlay .modal { border-radius: var(--radius); max-height: 85vh; overflow-y: auto; }
     }
 
     /* ── Parent task card (has subtasks) ── */
@@ -701,7 +742,7 @@
     </div>
     <div>
       <button class="btn-refresh" id="refreshBtn" title="Refresh" aria-label="Refresh tasks">↻</button>
-      <div class="app-version">v2.1.0</div>
+      <div class="app-version">v2.2.0</div>
     </div>
   </div>
   <div class="stats-bar">
@@ -808,6 +849,26 @@
     <div class="form-actions">
       <button type="button" class="btn btn-secondary" id="fpCancelBtn">Cancel</button>
       <button type="button" class="btn btn-primary" id="fpSubmitBtn">Park It 🚀</button>
+    </div>
+  </div>
+</div>
+
+<!-- Move Article Modal -->
+<div class="modal-overlay" id="moveArticleModalOverlay" role="dialog" aria-modal="true" aria-label="Move article to another list">
+  <div class="modal">
+    <h2>↗ Move Article To…</h2>
+    <div class="form-group">
+      <label>Destination</label>
+      <div class="dest-picker">
+        <button type="button" class="dest-btn" data-dest="to-visit">📍 To Visit</button>
+        <button type="button" class="dest-btn" data-dest="to-buy">🛒 To Buy</button>
+        <button type="button" class="dest-btn" data-dest="future-projects">🚀 Future Project</button>
+      </div>
+      <div class="field-error" id="destError">Please choose a destination</div>
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn btn-secondary" id="moveArticleCancelBtn">Cancel</button>
+      <button type="button" class="btn btn-primary" id="moveArticleSubmitBtn">Move It ↗</button>
     </div>
   </div>
 </div>
@@ -1127,6 +1188,14 @@ function renderTasks() {
       );
     });
   });
+
+  // Attach move-article listeners
+  list.querySelectorAll('.move-article-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      openMoveArticleModal(btn.dataset.id, btn.dataset.name, btn.dataset.url);
+    });
+  });
 }
 
 function taskCard(task, isLater = false, isOverdue = false) {
@@ -1199,6 +1268,7 @@ function articleCard(task) {
         ${openBtn}
       </div>
       <div class="card-right">
+        <button class="move-article-btn" data-id="${task.id}" data-name="${escHtml(title)}" data-url="${escHtml(task.articleUrl || '')}" title="Move to another list" aria-label="Move '${escHtml(title)}' to another list">↗</button>
         ${spireBadge}
       </div>
     </div>`;
@@ -1467,7 +1537,7 @@ $('modalOverlay').addEventListener('click', e => {
 });
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeModal(); closeParkModal(); }
+  if (e.key === 'Escape') { closeModal(); closeParkModal(); closeMoveArticleModal(); }
 });
 
 $('addForm').addEventListener('submit', async e => {
@@ -1689,6 +1759,101 @@ $('fpSubmitBtn').addEventListener('click', async () => {
     } else {
       renderTasks();
     }
+    showToast('Something went wrong — try again');
+  }
+});
+
+// ── Move Article Modal ────────────────────────────────────────────────────────
+let _maTaskId = null;
+let _maTaskName = null;
+let _maArticleUrl = null;
+let _maDest = null;
+
+function openMoveArticleModal(taskId, taskName, articleUrl) {
+  _maTaskId = taskId;
+  _maTaskName = taskName;
+  _maArticleUrl = articleUrl;
+  _maDest = null;
+  document.querySelectorAll('.dest-btn').forEach(b => b.classList.remove('selected'));
+  $('destError').style.display = 'none';
+  $('moveArticleSubmitBtn').disabled = false;
+  $('moveArticleSubmitBtn').textContent = 'Move It ↗';
+  $('moveArticleModalOverlay').classList.add('open');
+}
+
+function closeMoveArticleModal() {
+  $('moveArticleModalOverlay').classList.remove('open');
+  _maTaskId = null;
+  _maTaskName = null;
+  _maArticleUrl = null;
+  _maDest = null;
+}
+
+document.querySelectorAll('.dest-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.dest-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    _maDest = btn.dataset.dest;
+    $('destError').style.display = 'none';
+  });
+});
+
+$('moveArticleCancelBtn').addEventListener('click', closeMoveArticleModal);
+$('moveArticleModalOverlay').addEventListener('click', e => {
+  if (e.target === $('moveArticleModalOverlay')) closeMoveArticleModal();
+});
+
+$('moveArticleSubmitBtn').addEventListener('click', async () => {
+  if (!_maDest) {
+    $('destError').style.display = 'block';
+    return;
+  }
+
+  const taskId = _maTaskId;
+  const taskName = _maTaskName;
+  const articleUrl = _maArticleUrl;
+  const destination = _maDest;
+
+  const btn = $('moveArticleSubmitBtn');
+  btn.disabled = true;
+  btn.textContent = 'Moving…';
+
+  // Optimistic: fade out the card
+  const card = document.querySelector(`.article-card[data-id="${taskId}"]`);
+  if (card) {
+    card.style.transition = 'opacity 0.3s';
+    card.style.opacity = '0';
+  }
+
+  closeMoveArticleModal();
+
+  try {
+    const res = await fetch('/api/move-article', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskId, taskName, articleUrl, destination, clientDate: today }),
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      tasks = tasks.filter(t => t.id !== taskId);
+      const todayCount = tasks.filter(t => ['today','later-today'].includes(getTaskBucket(t.dueDate))).length;
+      const overdueCount = tasks.filter(t => getTaskBucket(t.dueDate) === 'overdue').length;
+      $('statToday').textContent = todayCount;
+      $('statOverdue').textContent = overdueCount;
+      renderTasks();
+      const destLabels = { 'to-visit': '📍 To Visit', 'to-buy': '🛒 To Buy', 'future-projects': '🚀 Future Projects' };
+      showToast(`Moved to ${destLabels[destination] || destination} ↗`);
+    } else {
+      if (card && card.isConnected) card.style.opacity = '1';
+      else renderTasks();
+      showToast('Something went wrong — try again');
+      console.error('move-article error:', data.error);
+    }
+  } catch (err) {
+    console.error('move-article fetch error:', err);
+    if (card && card.isConnected) card.style.opacity = '1';
+    else renderTasks();
     showToast('Something went wrong — try again');
   }
 });
