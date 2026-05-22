@@ -20,6 +20,22 @@
     "api/log-media.js": {
       "memory": 128,
       "maxDuration": 15
+    },
+    "api/stats.js": {
+      "memory": 128,
+      "maxDuration": 15
+    },
+    "api/health.js": {
+      "memory": 128,
+      "maxDuration": 15
+    },
+    "api/transcode.js": {
+      "memory": 128,
+      "maxDuration": 15
+    },
+    "api/move-task.js": {
+      "memory": 128,
+      "maxDuration": 15
     }
   },
   "routes": [
@@ -42,6 +58,22 @@
     {
       "src": "/api/log-media",
       "dest": "/api/log-media.js"
+    },
+    {
+      "src": "/api/stats",
+      "dest": "/api/stats.js"
+    },
+    {
+      "src": "/api/health",
+      "dest": "/api/health.js"
+    },
+    {
+      "src": "/api/transcode",
+      "dest": "/api/transcode.js"
+    },
+    {
+      "src": "/api/move-task",
+      "dest": "/api/move-task.js"
     },
     {
       "src": "/scan",

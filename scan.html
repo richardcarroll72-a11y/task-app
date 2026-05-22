@@ -291,6 +291,8 @@
       bottom: calc(var(--safe-bottom) + 32px);
       transform: translateX(-50%) translateY(120%);
       z-index: 60;
+      opacity: 0;
+      pointer-events: none;
       background: var(--green);
       color: white;
       padding: 12px 22px;
@@ -298,9 +300,12 @@
       font-weight: 600;
       font-size: 0.95rem;
       box-shadow: 0 8px 24px rgba(16,185,129,0.4);
-      transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1);
+      transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.2s;
     }
-    .toast.show { transform: translateX(-50%) translateY(0); }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
     .toast.error {
       background: var(--red);
       box-shadow: 0 8px 24px rgba(239,68,68,0.4);
@@ -361,7 +366,9 @@
   </div>
 
   <!-- Camera scanner -->
-  <div id="reader"></div>
+  <div id="reader">
+    <video id="readerVideo" playsinline muted autoplay></video>
+  </div>
 
   <!-- Reticle -->
   <div class="reticle" id="reticle" style="display:none;">
@@ -396,9 +403,9 @@
   </div>
 
   <!-- Toast -->
-  <div class="toast" id="toast">Logged ✓</div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="https://unpkg.com/@zxing/browser@0.1.5/umd/zxing-browser.min.js"></script>
   <script>
     (function () {
       'use strict';
@@ -419,7 +426,8 @@
       const startBtn = document.getElementById('startBtn');
       const toast = document.getElementById('toast');
 
-      let scanner = null;
+      let codeReader = null;
+      let scannerControls = null;
       let busy = false;          // currently looking-up or showing result sheet
       let lastBarcode = null;    // dedupe rapid repeat reads
       let lastBarcodeAt = 0;
@@ -478,7 +486,7 @@
       }
 
       async function logMedia(status) {
-        if (!currentResult) return;
+        if (!currentResult) throw new Error('No item to log');
         const payload = {
           type: currentResult.type,
           title: currentResult.title,
@@ -539,29 +547,22 @@
         startBtn.textContent = 'Starting camera…';
 
         try {
-          const formats = [
-            Html5QrcodeSupportedFormats.EAN_13,
-            Html5QrcodeSupportedFormats.EAN_8,
-            Html5QrcodeSupportedFormats.UPC_A,
-            Html5QrcodeSupportedFormats.UPC_E,
-            Html5QrcodeSupportedFormats.CODE_128,
-          ];
-          scanner = new Html5Qrcode('reader', { formatsToSupport: formats, verbose: false });
+          if (!window.ZXingBrowser) throw new Error('Scanner library failed to load');
 
-          await scanner.start(
-            { facingMode: { exact: 'environment' } },
-            { fps: 12, qrbox: undefined, aspectRatio: window.innerHeight / window.innerWidth },
-            onScan,
-            () => { /* per-frame failures are normal — ignore */ }
-          ).catch(async () => {
-            // Fall back if `exact: environment` isn't honored (some iOS)
-            await scanner.start(
-              { facingMode: 'environment' },
-              { fps: 12, qrbox: undefined },
-              onScan,
-              () => {}
-            );
-          });
+          codeReader = new ZXingBrowser.BrowserMultiFormatReader();
+          const videoEl = document.getElementById('readerVideo');
+
+          // null deviceId → @zxing/browser auto-picks the rear camera
+          // (it requests `facingMode: 'environment'` internally).
+          // The callback fires once per frame: result is null on misses,
+          // populated when a barcode is decoded.
+          scannerControls = await codeReader.decodeFromVideoDevice(
+            null,
+            videoEl,
+            (result) => {
+              if (result) onScan(result.getText());
+            }
+          );
 
           idleScreen.style.display = 'none';
           topbar.style.display = '';
@@ -585,9 +586,13 @@
           // disable both buttons while logging
           document.querySelectorAll('.sheet-actions .btn').forEach(b => b.disabled = true);
           try {
-            await logMedia(status);
+            const result = await logMedia(status);
             sheet.classList.remove('open');
-            showToast(status === 'started' ? 'Started — logged ✓' : 'Finished — logged ✓');
+            if (result?.discogs && result.discogs.ok === false) {
+              showToast(`Logged in Notion, Discogs failed: ${result.discogs.error}`, true);
+            } else {
+              showToast(status === 'started' ? 'Started — logged ✓' : 'Finished — logged ✓');
+            }
             currentResult = null;
             setTimeout(() => { busy = false; lastBarcode = null; }, 800);
           } catch (err) {
@@ -600,7 +605,9 @@
 
       // Stop the camera if the user navigates away — saves battery
       window.addEventListener('pagehide', () => {
-        if (scanner) scanner.stop().catch(() => {});
+        if (scannerControls) {
+          try { scannerControls.stop(); } catch (_) {}
+        }
       });
     })();
   </script>
