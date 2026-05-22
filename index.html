@@ -937,7 +937,7 @@
         <a class="btn-icon" href="/scan" title="Scan media" aria-label="Open barcode scanner">📷</a>
         <button class="btn-icon" id="refreshBtn" title="Refresh" aria-label="Refresh tasks">↻</button>
       </div>
-      <div class="app-version">v2.2.0</div>
+      <div class="app-version">v2.2.1</div>
     </div>
   </div>
   <div class="stats-bar">
@@ -2174,14 +2174,15 @@ $('moveArticleSubmitBtn').addEventListener('click', async () => {
     } else {
       if (card && card.isConnected) card.style.opacity = '1';
       else renderTasks();
-      showToast('Something went wrong — try again');
+      const errMsg = (data.error || 'Unknown error').slice(0, 100);
+      showToast(`Move failed: ${errMsg}`);
       console.error('move-article error:', data.error);
     }
   } catch (err) {
     console.error('move-article fetch error:', err);
     if (card && card.isConnected) card.style.opacity = '1';
     else renderTasks();
-    showToast('Something went wrong — try again');
+    showToast(`Move failed: ${err.message || 'Network error'}`);
   }
 });
 

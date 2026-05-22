@@ -84,24 +84,44 @@ The app will appear on your home screen with the ✅ icon and "My Tasks" label. 
 
 ```
 task-app/
-├── index.html          Main PWA (single file, all CSS + JS embedded)
-├── manifest.json       PWA manifest (enables "Add to Home Screen")
-├── sw.js               Service worker (offline support)
-├── vercel.json         Vercel routing config
+├── index.html              Main PWA (single file, all CSS + JS embedded)
+├── scan.html               Barcode scanner UI (books + vinyl)
+├── manifest.json           PWA manifest (enables "Add to Home Screen")
+├── sw.js                   Service worker (offline support)
+├── vercel.json             Vercel routing + function config
 ├── api/
-│   └── tasks.js        Serverless function — proxies Notion API
-└── README.md           This file
+│   ├── tasks.js            Fetch / create / complete tasks
+│   ├── projects.js         List active projects
+│   ├── future-project.js   Park task as Future Project
+│   ├── move-task.js        Move task to To Buy or To Visit DB
+│   ├── move-article.js     Move article to To Visit / To Buy / Future Projects
+│   ├── log-media.js        Log book or vinyl to Media Log DB
+│   ├── lookup-barcode.js   Barcode → book/album metadata
+│   ├── stats.js            Completion stats
+│   ├── health.js           Health metrics for nudge banner
+│   ├── transcode.js        Live transcode status
+│   └── health.js           Health check
+└── README.md               This file
 ```
 
 ---
 
-## API endpoints (handled by api/tasks.js)
+## API endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/api/tasks` | Fetch today's + overdue tasks (Status ≠ Done, Due Date ≤ today) |
 | `POST` | `/api/tasks` | Create a new task in Notion |
 | `PATCH` | `/api/tasks?id={page_id}` | Mark a task complete (Status = Done, Date Completed = today) |
+| `GET` | `/api/projects` | List active projects |
+| `POST` | `/api/future-project` | Park a task as a Future Project |
+| `POST` | `/api/move-task` | Move a task to To Buy or To Visit DB |
+| `POST` | `/api/move-article` | Move an article task to To Visit / To Buy / Future Projects |
+| `POST` | `/api/log-media` | Log a book or vinyl record to Media Log DB |
+| `GET` | `/api/lookup-barcode` | Look up book or album metadata by barcode |
+| `GET` | `/api/stats` | Fetch completion stats |
+| `GET` | `/api/health` | Health metrics for nudge banner |
+| `GET` | `/api/transcode` | Live transcode pipeline status |
 
 ---
 
@@ -145,4 +165,4 @@ task-app/
 
 ---
 
-Built for Richard · richardcarroll72@gmail.com · April 2026
+Built for Richard · richardcarroll72@gmail.com · May 2026
