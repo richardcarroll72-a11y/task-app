@@ -937,7 +937,7 @@
         <a class="btn-icon" href="/scan" title="Scan media" aria-label="Open barcode scanner">📷</a>
         <button class="btn-icon" id="refreshBtn" title="Refresh" aria-label="Refresh tasks">↻</button>
       </div>
-      <div class="app-version">v2.2.1</div>
+      <div class="app-version">v2.2.2</div>
     </div>
   </div>
   <div class="stats-bar">
@@ -1622,11 +1622,11 @@ function toggleProject(id) {
 
 function buildCard(t, isLater = false, isOverdue = false) {
   return (t.subtaskIds && t.subtaskIds.length > 0)
-    ? parentTaskCard(t)
+    ? parentTaskCard(t, isOverdue)
     : taskCard(t, isLater, isOverdue);
 }
 
-function parentTaskCard(task) {
+function parentTaskCard(task, isOverdue = false) {
   const total = task.subtasks ? task.subtasks.length : 0;
   const done = task.subtasks ? task.subtasks.filter(s => s.status === 'Done').length : 0;
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
@@ -1659,6 +1659,10 @@ function parentTaskCard(task) {
     .map(s => subtaskCard(s, task.id))
     .join('');
 
+  const snoozeBtn = isOverdue
+    ? `<button class="snooze-btn" data-id="${task.id}" title="Snooze to tomorrow" aria-label="Snooze '${escHtml(task.name)}' to tomorrow">→ Tomorrow</button>`
+    : '';
+
   return `
     <div class="task-card parent-card" data-task-id="${task.id}">
       <div class="card-main" onclick="toggleSubtasks('${task.id}')">
@@ -1670,6 +1674,7 @@ function parentTaskCard(task) {
             <span class="subtask-progress-label" id="progress-label-${task.id}">${done}/${total}</span>
           </div>
         </div>
+        ${snoozeBtn}
         <div class="card-body">
           <div class="task-name">${escHtml(task.name)}</div>
           <div class="task-meta">

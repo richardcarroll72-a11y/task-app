@@ -335,6 +335,9 @@ Triggers `KitSyncRunner.app` daily at 5:45 AM. The plist sets `NOTION_TOKEN` onl
 - Error toast now shows actual Notion API error message instead of generic "something went wrong"
 - README.md expanded: full API endpoint table (12 endpoints), complete file structure listing
 
+**Bug fixes (v2.2.2):**
+- "→ Tomorrow" snooze button now renders on overdue parent tasks (those with subtasks). `buildCard()` was dropping the `isOverdue` flag when dispatching to `parentTaskCard()`, and `parentTaskCard` had no snooze-render branch at all.
+
 **Versioning standard adopted:** SemVer — PATCH for fixes/docs, MINOR for new features, MAJOR for redesigns.
 
 ---
