@@ -99,7 +99,6 @@ task-app/
 │   ├── lookup-barcode.js   Barcode → book/album metadata
 │   ├── stats.js            Completion stats
 │   ├── health.js           Health metrics for nudge banner
-│   ├── transcode.js        Live transcode status
 │   └── health.js           Health check
 └── README.md               This file
 ```
@@ -121,7 +120,6 @@ task-app/
 | `GET` | `/api/lookup-barcode` | Look up book or album metadata by barcode |
 | `GET` | `/api/stats` | Fetch completion stats |
 | `GET` | `/api/health` | Health metrics for nudge banner |
-| `GET` | `/api/transcode` | Live transcode pipeline status |
 
 ---
 

@@ -29,10 +29,6 @@
       "memory": 128,
       "maxDuration": 15
     },
-    "api/transcode.js": {
-      "memory": 128,
-      "maxDuration": 15
-    },
     "api/move-task.js": {
       "memory": 128,
       "maxDuration": 15
@@ -70,10 +66,6 @@
     {
       "src": "/api/health",
       "dest": "/api/health.js"
-    },
-    {
-      "src": "/api/transcode",
-      "dest": "/api/transcode.js"
     },
     {
       "src": "/api/move-task",

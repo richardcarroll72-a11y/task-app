@@ -393,49 +393,6 @@
     }
     .offline-bar.visible { display: block; }
 
-    /* ── Transcode status widget ── */
-    .transcode-widget {
-      max-width: 640px;
-      margin: 24px auto 16px;
-      padding: 0 16px;
-    }
-    .transcode-card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      box-shadow: var(--shadow);
-      overflow: hidden;
-    }
-    .transcode-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 14px;
-      cursor: pointer;
-      user-select: none;
-      font-size: 0.78rem;
-      color: var(--muted);
-      font-weight: 600;
-    }
-    .transcode-header:hover { background: rgba(0,0,0,0.02); }
-    .transcode-header .tw-title { flex: 1; }
-    .transcode-header .tw-chevron { font-size: 0.7rem; }
-    .transcode-body {
-      padding: 0 14px 12px;
-      font-size: 0.82rem;
-      color: var(--text);
-      line-height: 1.5;
-    }
-    .transcode-body.collapsed { display: none; }
-    .transcode-body .tw-row { display: flex; gap: 6px; }
-    .transcode-body .tw-label {
-      color: var(--muted);
-      min-width: 80px;
-      font-size: 0.75rem;
-    }
-    .transcode-body .tw-val { flex: 1; word-break: break-word; }
-    .transcode-body .tw-unavailable { color: var(--muted); font-style: italic; }
-
     /* ── FAB (add button) ── */
     .fab {
       position: fixed;
@@ -937,7 +894,7 @@
         <a class="btn-icon" href="/scan" title="Scan media" aria-label="Open barcode scanner">📷</a>
         <button class="btn-icon" id="refreshBtn" title="Refresh" aria-label="Refresh tasks">↻</button>
       </div>
-      <div class="app-version">v2.2.2</div>
+      <div class="app-version">v2.3.0</div>
     </div>
   </div>
   <div class="stats-bar">
@@ -975,17 +932,6 @@
   <div id="spireBar" style="display:none"></div>
   <div id="taskList" style="display:none"></div>
 </main>
-
-<div class="transcode-widget" id="transcodeWidget" hidden>
-  <div class="transcode-card">
-    <div class="transcode-header" id="transcodeHeader">
-      <span>🎬</span>
-      <span class="tw-title" id="transcodeTitle">Transcode status</span>
-      <span class="tw-chevron" id="transcodeChevron">▸</span>
-    </div>
-    <div class="transcode-body collapsed" id="transcodeBody"></div>
-  </div>
-</div>
 
 <button class="fab" id="addBtn" title="Add task" aria-label="Add new task">+</button>
 
@@ -2313,66 +2259,9 @@ $('healthNudgeDismiss').addEventListener('click', () => {
   localStorage.setItem(HEALTH_DISMISS_KEY, today);
 });
 
-// ── Transcode status widget ──────────────────────────────────────────────────
-async function loadTranscodeStatus() {
-  try {
-    const res = await fetch('/api/transcode');
-    if (!res.ok) return; // stay hidden
-    const data = await res.json();
-
-    const body = $('transcodeBody');
-    const titleEl = $('transcodeTitle');
-    if (titleEl) {
-      titleEl.textContent = data.source === 'live-status' ? 'Transcode live status'
-        : data.source === 'log' ? 'Recent transcodes'
-        : 'Transcode status';
-    }
-    if (!data.available) {
-      body.innerHTML = `<div class="tw-unavailable">Status unavailable</div>`;
-    } else if (data.source === 'live-status') {
-      const rows = (data.vms || []).map(vm => {
-        const encoding = vm.currentFile && vm.currentFile !== 'idle'
-          ? `<strong>${escHtml(vm.currentFile)}</strong>`
-          : `<span class="tw-unavailable">idle</span>`;
-        const qLabel = `${vm.queueCount ?? 0} left`;
-        const last = vm.lastCompleted && vm.lastCompleted !== '—'
-          ? `last: ${escHtml(vm.lastCompleted)}`
-          : '';
-        return `<div class="tw-row"><span class="tw-label">${escHtml(vm.vmName)}</span><span class="tw-val">${encoding} · ${escHtml(qLabel)}${last ? ' · ' + last : ''}</span></div>`;
-      }).join('');
-      body.innerHTML = rows || `<div class="tw-unavailable">No VM status yet</div>`;
-    } else if (data.source === 'log') {
-      const rows = (data.recent || []).map(r => {
-        const label = r.date ? r.date.slice(0, 10) : '—';
-        const parts = [];
-        if (r.title && r.title !== '—') parts.push(r.title);
-        else if (r.showMovie) parts.push(r.showMovie);
-        if (r.savings != null) parts.push(`saved ${Math.round(r.savings)}%`);
-        return `<div class="tw-row"><span class="tw-label">${escHtml(label)}</span><span class="tw-val">${escHtml(parts.join(' · ') || '—')}</span></div>`;
-      }).join('');
-      body.innerHTML = rows || `<div class="tw-unavailable">No transcodes logged</div>`;
-    } else {
-      // page fallback — show whatever text we got
-      const lines = (data.lines || []).map(l => `<div class="tw-val">${escHtml(l)}</div>`).join('');
-      body.innerHTML = lines || `<div class="tw-unavailable">No status info on page</div>`;
-    }
-
-    $('transcodeWidget').hidden = false;
-  } catch (err) {
-    console.error('transcode fetch failed:', err);
-  }
-}
-
-$('transcodeHeader').addEventListener('click', () => {
-  const body = $('transcodeBody');
-  const collapsed = body.classList.toggle('collapsed');
-  $('transcodeChevron').textContent = collapsed ? '▸' : '▾';
-});
-
 // ── Init ─────────────────────────────────────────────────────────────────────
 loadTasks();
 checkHealthNudge();
-loadTranscodeStatus();
 </script>
 </body>
 </html>

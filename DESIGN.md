@@ -316,12 +316,15 @@ Triggers `KitSyncRunner.app` daily at 5:45 AM. The plist sets `NOTION_TOKEN` onl
 
 ## Changelog
 
+### v2.3.0 (May 2026)
+- Removed the Transcode status widget from the dashboard along with the `/api/transcode` endpoint (`api/transcode.js`) and its `vercel.json` registration. The to-do app no longer surfaces transcode pipeline status.
+
 ### Phase 10 (May 2026) — v2.2.x
 
 **Article move-to feature (v2.2.0):**
 - `api/move-article.js` added — POST endpoint to move an article task to To Visit, To Buy, or Future Projects in Notion
 - `api/move-task.js` added — POST endpoint to move a regular To-Do task to To Buy or To Visit
-- `api/health.js`, `api/stats.js`, `api/transcode.js` added — health nudge banner, completion stats, transcode pipeline status
+- `api/health.js`, `api/stats.js` added — health nudge banner, completion stats
 - `scan.html` added — barcode scanner UI for logging books and vinyl
 - `api/log-media.js`, `api/lookup-barcode.js` added — barcode lookup and media logging
 - `vercel.json` updated to register all new serverless functions
