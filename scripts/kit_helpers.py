@@ -6,9 +6,19 @@ Used by kit_sync.py, gmail_sync.py, and calendar_sync.py.
 
 import json
 import re
+import ssl
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+
+# macOS Python.framework builds don't bundle root certs — use system CA bundle
+def _ssl_ctx() -> ssl.SSLContext:
+    ctx = ssl.create_default_context()
+    try:
+        ctx.load_verify_locations("/etc/ssl/cert.pem")
+    except Exception:
+        pass
+    return ctx
 
 NOTION_VERSION = "2022-06-28"
 KIT_DB_ID = "44f5fdf6-c4b5-42ed-a97b-5a667ffebd13"
@@ -16,6 +26,14 @@ KIT_DB_ID = "44f5fdf6-c4b5-42ed-a97b-5a667ffebd13"
 TODO_DB_ID_ENV = "NOTION_DATABASE_ID"  # env var name for To-Do database
 
 REACH_OUT_DAYS = {
+    # Notion option values (canonical)
+    "1 week": 7,
+    "2 weeks": 14,
+    "1 month": 30,
+    "2 months": 60,
+    "3 months": 90,
+    "6 months": 180,
+    # Legacy aliases
     "Weekly": 7,
     "Fortnightly": 14,
     "Monthly": 30,
@@ -89,7 +107,7 @@ def notion_request(
             "Content-Type": "application/json",
         },
     )
-    with urllib.request.urlopen(req) as resp:
+    with urllib.request.urlopen(req, context=_ssl_ctx()) as resp:
         return json.loads(resp.read())
 
 
@@ -128,6 +146,7 @@ def extract_kit_fields(page: dict) -> dict:
         "name": rich_text_value("Name"),
         "phone": (props.get("Phone") or {}).get("phone_number") or "",
         "email": rich_text_value("Email"),
+        "imessage_handle": rich_text_value("iMessage Handle"),
         "last_contact": parse_notion_date(props.get("Last Contact")),
         "reach_out_every": select_value("Reach Out Every"),
         "last_method": select_value("Last Method of Contact"),
@@ -173,6 +192,91 @@ def update_kit_record(
         notion_request("PATCH", f"/pages/{page_id}", {"properties": props}, notion_token)
 
 
+# ─── iMessage attributedBody extraction ──────────────────────────────────────
+
+def extract_text_from_attributed_body(blob: bytes) -> str:
+    """
+    Extract plain text from an NSAttributedString NSKeyedArchiver binary plist.
+
+    macOS Sonoma/Sequoia stores iMessage body in the attributedBody column
+    instead of (or in addition to) the text column.
+
+    Tries three approaches in order:
+    1. plistlib parse + UID dereference via NSString key
+    2. plistlib parse + first long non-metadata string in $objects
+    3. Raw UTF-8 byte scan as last resort
+    """
+    if not blob:
+        return ""
+
+    # ── Approach 1 & 2: plistlib ─────────────────────────────────────────────
+    try:
+        import plistlib
+        plist = plistlib.loads(blob)
+        objects = plist.get("$objects", [])
+
+        for obj in objects:
+            if not isinstance(obj, dict):
+                continue
+            for key in ("NSString", "NS.string"):
+                val = obj.get(key)
+                if val is None:
+                    continue
+                # plistlib.UID has .data in Python 3.8+ (not an int subclass)
+                if hasattr(val, "data"):
+                    idx = val.data
+                elif isinstance(val, int):
+                    idx = val
+                else:
+                    idx = None
+
+                if idx is not None:
+                    try:
+                        candidate = objects[idx]
+                        if isinstance(candidate, str) and candidate.strip() and candidate != "$null":
+                            return candidate
+                    except (IndexError, TypeError):
+                        pass
+                elif isinstance(val, str) and val.strip() and val != "$null":
+                    return val
+
+        # Approach 2 fallback: first long non-metadata string
+        for obj in objects:
+            if (
+                isinstance(obj, str)
+                and len(obj) > 8
+                and obj != "$null"
+                and not obj.startswith("$")
+                and not obj.startswith("NS")
+                and not obj.startswith("bplist")
+            ):
+                return obj
+
+    except Exception:
+        pass
+
+    # ── Approach 3: raw UTF-8 byte scan ──────────────────────────────────────
+    # These blobs are not standard bplist — fall back to scanning raw bytes for
+    # the longest printable-character run that looks like message content.
+    try:
+        import re
+        text = blob.decode("utf-8", errors="ignore")
+        candidates = [
+            m for m in re.findall(r"[\x20-\x7e\u00c0-\u024f]{5,}", text)
+            if not m.startswith("$")
+            and not m.startswith("NS")
+            and not m.startswith("__k")
+            and not m.startswith("bplist")
+            and "apple" not in m.lower()
+        ]
+        if candidates:
+            return max(candidates, key=len)
+    except Exception:
+        pass
+
+    return ""
+
+
 # ─── Claude summarisation ────────────────────────────────────────────────────
 
 def summarise_with_claude(
@@ -212,7 +316,7 @@ def summarise_with_claude(
             "content-type": "application/json",
         },
     )
-    with urllib.request.urlopen(req) as resp:
+    with urllib.request.urlopen(req, context=_ssl_ctx()) as resp:
         result = json.loads(resp.read())
 
     return result["content"][0]["text"].strip()

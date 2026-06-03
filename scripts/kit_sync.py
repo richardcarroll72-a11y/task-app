@@ -46,16 +46,19 @@ def mac_ns_to_datetime(ts: int) -> datetime:
     return datetime.fromtimestamp(unix_ts, tz=timezone.utc)
 
 
-def get_sent_contacts(lookback_days: int, conn: sqlite3.Connection) -> dict:
+def get_sent_contacts(lookback_days: int, conn: sqlite3.Connection) -> tuple:
     """
-    Returns {normalized_phone: latest_sent_datetime} for contacts messaged
-    in the last lookback_days days.
+    Returns:
+      phone_contacts  — {normalized_phone: latest_sent_datetime}
+      handle_contacts — {email_handle_lowercase: latest_sent_datetime}
+    for all contacts messaged in the last lookback_days days.
+    Email-based Apple IDs (e.g. frank@example.com) go into handle_contacts.
     """
     cutoff_unix = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).timestamp()
     cutoff_mac_ns = int((cutoff_unix - MAC_EPOCH) * 1e9)
 
     query = """
-        SELECT h.id AS phone, MAX(m.date) AS last_date
+        SELECT h.id AS handle, MAX(m.date) AS last_date
         FROM message m
         JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
         JOIN chat_handle_join chj ON chj.chat_id = cmj.chat_id
@@ -65,20 +68,25 @@ def get_sent_contacts(lookback_days: int, conn: sqlite3.Connection) -> dict:
         GROUP BY h.id
     """
 
-    results: dict = {}
+    phone_contacts: dict = {}
+    handle_contacts: dict = {}
     for row in conn.execute(query, (cutoff_mac_ns,)):
-        phone = row[0]
+        handle = row[0]
         last_date = row[1]
-        if "@" in phone:  # skip email-based Apple IDs
-            continue
-        norm = kh.normalise_phone(phone)
-        if not norm:
-            continue
         dt = mac_ns_to_datetime(last_date)
-        if norm not in results or dt > results[norm]:
-            results[norm] = dt
 
-    return results
+        if "@" in handle:
+            key = handle.strip().lower()
+            if key not in handle_contacts or dt > handle_contacts[key]:
+                handle_contacts[key] = dt
+        else:
+            norm = kh.normalise_phone(handle)
+            if not norm:
+                continue
+            if norm not in phone_contacts or dt > phone_contacts[norm]:
+                phone_contacts[norm] = dt
+
+    return phone_contacts, handle_contacts
 
 
 def get_conversation_thread(
@@ -87,10 +95,12 @@ def get_conversation_thread(
     from_date: Optional[datetime],
     to_date: datetime,
     dry_run: bool = False,
+    email_handle: str = "",
 ) -> str:
     """
-    Collect all messages (sent + received) for a phone number between
+    Collect all messages (sent + received) for a contact between
     from_date (exclusive, or 30 days ago if None) and to_date (inclusive).
+    Looks up by phone suffix first; falls back to exact email handle match.
     Returns a plain-text transcript suitable for summarisation.
     """
     if from_date is None:
@@ -99,11 +109,22 @@ def get_conversation_thread(
     from_mac = int((from_date.timestamp() - MAC_EPOCH) * 1e9)
     to_mac = int((to_date.timestamp() - MAC_EPOCH) * 1e9)
 
-    # Find all handle IDs that match this normalised phone number
-    handle_rows = conn.execute(
-        "SELECT ROWID FROM handle WHERE id LIKE ?",
-        (f"%{phone_norm[-7:]}%",),  # partial suffix match for area-code variants
-    ).fetchall()
+    # Find all handle IDs that match this contact
+    if phone_norm:
+        # Partial suffix match handles country-code variants (+1 etc.)
+        handle_rows = conn.execute(
+            "SELECT ROWID FROM handle WHERE id LIKE ?",
+            (f"%{phone_norm[-7:]}%",),
+        ).fetchall()
+    elif email_handle:
+        # Exact email handle match for Apple-ID-based iMessage contacts
+        handle_rows = conn.execute(
+            "SELECT ROWID FROM handle WHERE LOWER(id) = ?",
+            (email_handle.lower(),),
+        ).fetchall()
+    else:
+        return ""
+
     if not handle_rows:
         return ""
     handle_ids = [r[0] for r in handle_rows]
@@ -119,16 +140,20 @@ def get_conversation_thread(
     chat_ids = [r[0] for r in chat_rows]
     chat_placeholders = ",".join("?" * len(chat_ids))
 
-    # Fetch all messages in those chats within the date window, deduped by ROWID
+    # Fetch all messages in those chats within the date window, deduped by ROWID.
+    # Also fetch attributedBody: macOS Sonoma/Sequoia stores the message body there
+    # (as an NSKeyedArchiver binary plist) when the text column is NULL.
     query = f"""
-        SELECT DISTINCT m.ROWID, m.date, m.is_from_me, m.text
+        SELECT DISTINCT m.ROWID, m.date, m.is_from_me, m.text, m.attributedBody
         FROM message m
         JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
         WHERE cmj.chat_id IN ({chat_placeholders})
           AND m.date > ?
           AND m.date <= ?
-          AND m.text IS NOT NULL
-          AND m.text != ''
+          AND (
+              (m.text IS NOT NULL AND m.text != '')
+              OR m.attributedBody IS NOT NULL
+          )
         ORDER BY m.date ASC
     """
     rows = conn.execute(query, (*chat_ids, from_mac, to_mac)).fetchall()
@@ -138,7 +163,12 @@ def get_conversation_thread(
 
     limit = 3 if dry_run else 200
     lines = []
-    for rowid, ts, is_from_me, text in rows[:limit]:
+    for rowid, ts, is_from_me, text, attributed_body in rows[:limit]:
+        # Prefer text column; fall back to extracting from attributedBody blob
+        if not text and attributed_body:
+            text = kh.extract_text_from_attributed_body(attributed_body)
+        if not text or not text.strip():
+            continue  # Skip reactions, attachments with no caption, etc.
         dt = mac_ns_to_datetime(ts)
         speaker = "Me" if is_from_me else "Them"
         lines.append(f"[{dt.strftime('%Y-%m-%d %H:%M')}] {speaker}: {text}")
@@ -219,8 +249,9 @@ def main() -> None:
     try:
         conn = sqlite3.connect(tmp)
 
-        sent = get_sent_contacts(LOOKBACK_DAYS, conn)
-        print(f"[kit_sync] {len(sent)} contacts with sent messages in last {LOOKBACK_DAYS} days")
+        phone_contacts, handle_contacts = get_sent_contacts(LOOKBACK_DAYS, conn)
+        total_contacts = len(phone_contacts) + len(handle_contacts)
+        print(f"[kit_sync] {total_contacts} contacts with sent messages in last {LOOKBACK_DAYS} days ({len(phone_contacts)} phone, {len(handle_contacts)} email handle)")
 
         kit_pages = kh.get_kit_records(NOTION_TOKEN)
         print(f"[kit_sync] {len(kit_pages)} KIT records loaded from Notion")
@@ -229,26 +260,49 @@ def main() -> None:
 
         updated = 0
         for fields in kit_fields_list:
-            if not fields["phone"]:
-                continue
+            new_last_contact = None
+            norm_phone = kh.normalise_phone(fields["phone"]) if fields["phone"] else ""
 
-            norm_kit = kh.normalise_phone(fields["phone"])
-            if not norm_kit or norm_kit not in sent:
-                continue
+            # Match by phone number
+            if norm_phone and norm_phone in phone_contacts:
+                new_last_contact = phone_contacts[norm_phone]
 
-            new_last_contact = sent[norm_kit]
+            # Match by iMessage Handle (email-based Apple ID)
+            imessage_handle = (fields.get("imessage_handle") or "").strip().lower()
+            if imessage_handle and imessage_handle in handle_contacts:
+                candidate = handle_contacts[imessage_handle]
+                if new_last_contact is None or candidate > new_last_contact:
+                    new_last_contact = candidate
+
+            if new_last_contact is None:
+                continue
             old_last_contact = fields["last_contact"]
 
+            already_has_summary = bool(fields.get("last_conversation", "").strip())
+            is_backfill = False
             if old_last_contact and new_last_contact.date() <= old_last_contact.date():
-                continue
+                if already_has_summary:
+                    continue  # Date current and summary exists — nothing to do
+                # Date current but no summary yet — fall through to generate one
+                new_last_contact = old_last_contact  # Keep existing date, just add summary
+                is_backfill = True  # Use wider window so we actually get messages
 
-            # Collect conversation thread
+            # Collect conversation thread.
+            # For backfills (date unchanged, no summary):
+            #   - pass None as from_date so we default to a 30-day lookback
+            #   - extend to_date by +1 day: old_last_contact is midnight UTC, but
+            #     messages happen later that day (Calgary is UTC-6), so the cutoff
+            #     would exclude same-day messages without this adjustment.
+            thread_from = None if is_backfill else old_last_contact
+            thread_to = (new_last_contact + timedelta(days=1)) if is_backfill else new_last_contact
+            imessage_handle = (fields.get("imessage_handle") or "").strip().lower()
             thread_text = get_conversation_thread(
                 conn,
-                norm_kit,
-                old_last_contact,
-                new_last_contact,
+                norm_phone,
+                thread_from,
+                thread_to,
                 dry_run=dry_run,
+                email_handle=imessage_handle,
             )
 
             if dry_run:
@@ -278,7 +332,7 @@ def main() -> None:
             # Update Notion
             updates = {
                 "last_contact": new_last_contact,
-                "last_method": "iMessage",
+                "last_method": "SMS/iMessage",
             }
             if next_reach_out:
                 updates["next_reach_out"] = next_reach_out
@@ -316,6 +370,15 @@ def main() -> None:
             print(f"[kit_sync] Done — {updated} record(s) updated, {todos} To-Do task(s) created")
         else:
             print(f"\n[kit_sync] [dry-run] Done — {updated} record(s) would be updated")
+
+        # Also produce iMessage export for morning briefings
+        if not dry_run:
+            try:
+                import imessage_export as _ime
+                _ime.main()
+                print("[kit_sync] iMessage export complete → ~/Documents/imessages-export.json")
+            except Exception as _e:
+                print(f"[kit_sync] WARNING: iMessage export failed: {_e}")
 
     finally:
         import os as _os
