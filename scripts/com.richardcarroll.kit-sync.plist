@@ -5,16 +5,15 @@
     <key>Label</key>
     <string>com.richardcarroll.kit-sync</string>
 
+    <!--
+        The Notion token is NOT stored here. kit_sync_launch.sh loads it from
+        an external secrets file (~/.config/kit_sync/notion_token) and exports
+        NOTION_TOKEN before exec'ing the runner. See scripts/kit_sync_launch.sh.
+    -->
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/richardcarroll/Library/Scripts/KitSyncRunner.app/Contents/MacOS/kit-sync-runner</string>
+        <string>/Users/richardcarroll/Library/Scripts/kit_sync_launch.sh</string>
     </array>
-
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>NOTION_TOKEN</key>
-        <string>YOUR_NOTION_TOKEN_HERE</string>
-    </dict>
 
     <key>WorkingDirectory</key>
     <string>/Users/richardcarroll/Library/Scripts</string>

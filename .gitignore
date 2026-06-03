@@ -1,0 +1,6 @@
+# kit-sync secrets — the live Notion token is kept OUT of git.
+# It lives in ~/.config/kit_sync/notion_token (loaded by kit_sync_launch.sh).
+# These patterns guard against ever committing a token from the repo tree:
+scripts/kit_sync_secrets.sh
+scripts/notion_token
+*.token
