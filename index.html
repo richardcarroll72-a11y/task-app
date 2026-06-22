@@ -186,6 +186,70 @@
     .spire-seg-count  { font-size: 0.68rem; }
     .spire-seg-zero   { background: #e5e7eb; border-radius: 3px; align-self: center; height: 20px; }
 
+    /* ── Tab bar ── */
+    .tab-bar {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 14px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      padding-bottom: 2px;
+    }
+    .tab-bar::-webkit-scrollbar { display: none; }
+    .tab-btn {
+      flex: 1 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--card);
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      box-shadow: var(--shadow);
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .tab-btn:hover { background: var(--bg); }
+    .tab-btn:active { transform: scale(0.97); }
+    .tab-btn.active {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+      box-shadow: 0 2px 8px rgba(99,102,241,0.35);
+    }
+    .tab-count {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      border-radius: 9px;
+      background: var(--bg);
+      color: var(--muted);
+      font-size: 0.7rem;
+      font-weight: 700;
+    }
+    .tab-btn.active .tab-count { background: rgba(255,255,255,0.25); color: #fff; }
+
+    /* ── Tab panels ── */
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    .tab-empty {
+      text-align: center;
+      padding: 44px 24px;
+      color: var(--muted);
+    }
+    .tab-empty .emoji { font-size: 2.4rem; margin-bottom: 10px; }
+    .tab-empty p { font-size: 0.9rem; }
+
     /* ── Section label ── */
     .section-label {
       font-size: 0.72rem;
@@ -930,6 +994,7 @@
   </div>
 
   <div id="spireBar" style="display:none"></div>
+  <div id="tabBar" class="tab-bar" style="display:none"></div>
   <div id="taskList" style="display:none"></div>
 </main>
 
@@ -1223,6 +1288,7 @@ async function loadTasks() {
   } finally {
     $('loadingState').style.display = 'none';
     $('spireBar').style.display = 'block';
+    $('tabBar').style.display = 'flex';
     $('taskList').style.display = 'block';
     btn.classList.remove('spinning');
   }
@@ -1299,19 +1365,36 @@ function renderSpireBar(allTasks) {
     </div>`;
 }
 
+// ── Tabs ─────────────────────────────────────────────────────────────────────
+const TAB_DEFS = [
+  { id: 'today',    label: 'Today' },
+  { id: 'overdue',  label: 'Overdue' },
+  { id: 'projects', label: 'Projects' },
+  { id: 'articles', label: 'Articles' },
+  { id: 'people',   label: 'People' },
+];
+// Default to Today on every fresh page load. Persists across in-session
+// re-renders (e.g. after completing a task) so the user stays on their tab.
+let activeTab = 'today';
+
+function switchTab(name) {
+  if (!TAB_DEFS.some(t => t.id === name)) name = 'today';
+  activeTab = name;
+  document.querySelectorAll('#tabBar .tab-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('#taskList .tab-panel').forEach(p =>
+    p.classList.toggle('active', p.id === 'panel-' + name));
+  try { localStorage.setItem('activeTab', name); } catch {}
+}
+
+function tabEmpty(msg) {
+  return `<div class="tab-empty"><div class="emoji">📭</div><p>${escHtml(msg)}</p></div>`;
+}
+
 // ── Render tasks ─────────────────────────────────────────────────────────────
 function renderTasks() {
   const list = $('taskList');
-
-  if (tasks.length === 0) {
-    renderSpireBar([]);
-    list.innerHTML = `
-      <div class="empty-state">
-        <div class="emoji">🎉</div>
-        <p>You're all caught up!<br>No tasks due today or overdue.</p>
-      </div>`;
-    return;
-  }
+  const tabBar = $('tabBar');
 
   console.log('[tasks] raw dueDate values:', tasks.map(t => t.dueDate));
   const isArticle = t => t.name.startsWith('Read:') || t.type === 'Article' || t.type === 'Pluralistic';
@@ -1338,45 +1421,80 @@ function renderTasks() {
   const todayTasks = ungroupedTasks.filter(t => getTaskBucket(t.dueDate) === 'today');
   console.log('[tasks] today:', today, '| ungrouped today:', todayTasks.length, '| dueLater:', dueLaterTasks.length, '| overdue:', overdueTasks.length, '| articles:', articleTasks.length, '| relationships:', relationshipTasks.length, '| project groups:', Object.keys(tasksByProject).length);
 
-  let html = '';
+  // ── Tab counts (number of items in each tab) ──
+  const counts = {
+    today:    todayTasks.length + dueLaterTasks.length,
+    overdue:  overdueTasks.length,
+    projects: projectLinkedTasks.length,
+    articles: articleTasks.length,
+    people:   relationshipTasks.length,
+  };
 
-  // Project sections first
-  for (const [projectId, ptasks] of Object.entries(tasksByProject)) {
-    html += projectSection(projectId, ptasks);
+  // ── Today panel: Due Today + a "Later today" subsection ──
+  let todayHtml = '';
+  if (todayTasks.length === 0 && dueLaterTasks.length === 0) {
+    todayHtml = `
+      <div class="empty-state">
+        <div class="emoji">🎉</div>
+        <p>You're all caught up!<br>Nothing due today.</p>
+      </div>`;
+  } else {
+    todayHtml += todayTasks.map(t => buildCard(t, false)).join('');
+    if (dueLaterTasks.length > 0) {
+      todayHtml += `<div class="section-label">⏰ Later today (${dueLaterTasks.length})</div>`;
+      todayHtml += dueLaterTasks.map(t => buildCard(t, true)).join('');
+    }
   }
 
-  if (todayTasks.length > 0) {
-    html += `<div class="section-label">📅 Due Today (${todayTasks.length})</div>`;
-    html += todayTasks.map(t => buildCard(t, false)).join('');
-  }
+  // ── Overdue panel (keeps the → Tomorrow snooze button via isOverdue) ──
+  const overdueHtml = overdueTasks.length > 0
+    ? overdueTasks.map(t => buildCard(t, false, true)).join('')
+    : tabEmpty('Nothing overdue — nice.');
 
-  if (overdueTasks.length > 0) {
-    html += `<div class="section-label">🔥 Overdue (${overdueTasks.length})</div>`;
-    html += overdueTasks.map(t => buildCard(t, false, true)).join('');
-  }
+  // ── Projects panel: all project sections together ──
+  const projectsHtml = Object.keys(tasksByProject).length > 0
+    ? Object.entries(tasksByProject).map(([projectId, ptasks]) => projectSection(projectId, ptasks)).join('')
+    : tabEmpty('No project tasks here.');
 
-  if (dueLaterTasks.length > 0) {
-    html += `<div class="section-label">⏰ Due Later (${dueLaterTasks.length})</div>`;
-    html += dueLaterTasks.map(t => buildCard(t, true)).join('');
-  }
+  // ── Articles panel: read-queue line + article cards ──
+  const articlesHtml = articleTasks.length > 0
+    ? `<div class="read-queue-line" id="readQueueLine"></div>` + articleTasks.map(t => articleCard(t)).join('')
+    : tabEmpty('Nothing in the reading queue.');
 
-  if (articleTasks.length > 0) {
-    html += `<div class="section-label">📰 Articles (${articleTasks.length})</div>`;
-    html += `<div class="read-queue-line" id="readQueueLine"></div>`;
-    html += articleTasks.map(t => articleCard(t)).join('');
-  }
+  // ── People panel (formerly "Relationships") ──
+  const peopleHtml = relationshipTasks.length > 0
+    ? relationshipTasks.map(t => relationshipCard(t)).join('')
+    : tabEmpty('No one to reach out to right now.');
 
-  if (relationshipTasks.length > 0) {
-    html += `<div class="section-label">👥 Relationships (${relationshipTasks.length})</div>`;
-    html += relationshipTasks.map(t => relationshipCard(t)).join('');
-  }
+  const panels = {
+    today: todayHtml,
+    overdue: overdueHtml,
+    projects: projectsHtml,
+    articles: articlesHtml,
+    people: peopleHtml,
+  };
 
-  html += `<a class="notion-link" href="https://www.notion.so/64204e6b365f836c83798111f9c55f5a?v=33904e6b365f81d9884f000c75f1408d" target="_blank" rel="noopener">
-    Open in Notion ↗
-  </a>`;
+  // ── Render tab bar ──
+  tabBar.innerHTML = TAB_DEFS.map(t => `
+    <button class="tab-btn${t.id === activeTab ? ' active' : ''}" data-tab="${t.id}" aria-label="${t.label} (${counts[t.id]})">
+      <span>${t.label}</span>
+      <span class="tab-count">${counts[t.id]}</span>
+    </button>`).join('');
 
-  list.innerHTML = html;
+  // ── Render panels (all panels live in the DOM; CSS shows the active one) ──
+  list.innerHTML =
+    TAB_DEFS.map(t => `
+      <div class="tab-panel${t.id === activeTab ? ' active' : ''}" id="panel-${t.id}">${panels[t.id]}</div>`).join('') +
+    `<a class="notion-link" href="https://www.notion.so/64204e6b365f836c83798111f9c55f5a?v=33904e6b365f81d9884f000c75f1408d" target="_blank" rel="noopener">
+      Open in Notion ↗
+    </a>`;
+
   applyStats();
+
+  // Tab switching
+  tabBar.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  });
 
   // Attach complete listeners
   list.querySelectorAll('.check-btn:not(.subtask-check)').forEach(btn => {
