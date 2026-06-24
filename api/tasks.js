@@ -75,30 +75,36 @@ module.exports = async (req, res) => {
       // Without this, tasks due today in MDT (UTC-6) appear as "overdue" after 6 pm.
       const today = req.query.clientDate || new Date().toISOString().split('T')[0];
 
-      const data = await fetchNotion(`/databases/${DATABASE_ID}/query`, {
-        method: 'POST',
-        body: JSON.stringify({
-          filter: {
-            and: [
-              {
-                property: 'Status',
-                status: { does_not_equal: 'Done' },
-              },
-              {
-                property: 'Due Date',
-                date: { on_or_before: today },
-              },
-            ],
-          },
-          sorts: [
-            { property: 'Priority', direction: 'ascending' },
-            { property: 'Due Date', direction: 'ascending' },
-          ],
-          page_size: 100,
-        }),
-      });
+      // Fetch ALL matching tasks across pages. Notion caps page_size at 100 and
+      // returns has_more/next_cursor for the rest. Without pagination, once the
+      // not-done backlog exceeds 100 rows, today's tasks (which sort LAST by Due
+      // Date ascending) get dropped past the cap — so the "Today" tab looked empty
+      // even though tasks were due today.
+      const queryFilter = {
+        and: [
+          { property: 'Status', status: { does_not_equal: 'Done' } },
+          { property: 'Due Date', date: { on_or_before: today } },
+        ],
+      };
+      const querySorts = [
+        { property: 'Priority', direction: 'ascending' },
+        { property: 'Due Date', direction: 'ascending' },
+      ];
 
-      const tasks = (data.results || []).map(page => mapPage(page, today));
+      let results = [];
+      let cursor = undefined;
+      do {
+        const body = { filter: queryFilter, sorts: querySorts, page_size: 100 };
+        if (cursor) body.start_cursor = cursor;
+        const page = await fetchNotion(`/databases/${DATABASE_ID}/query`, {
+          method: 'POST',
+          body: JSON.stringify(body),
+        });
+        results = results.concat(page.results || []);
+        cursor = page.has_more ? page.next_cursor : undefined;
+      } while (cursor);
+
+      const tasks = results.map(page => mapPage(page, today));
 
       // Fetch and attach subtasks for any parent tasks
       const parentTasks = tasks.filter(t => t.subtaskIds.length > 0);
