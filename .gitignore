@@ -4,3 +4,25 @@
 scripts/kit_sync_secrets.sh
 scripts/notion_token
 *.token
+
+# ── Secrets & credentials (never commit) ──
+.config/
+.claude-ssh/
+**/.ssh/
+*_token*
+*token.txt
+oura_token*
+*.pem
+*.key
+.env
+.env.*
+
+# ── OS / editor noise ──
+.DS_Store
+**/.DS_Store
+.~lock.*#
+
+# ── Python ──
+__pycache__/
+*.pyc
+*.bak
