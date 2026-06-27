@@ -26,3 +26,14 @@ oura_token*
 __pycache__/
 *.pyc
 *.bak
+
+# ── Loose working files (notes, exports, helper scripts — not part of the web app) ──
+*.xlsx
+*.docx
+*.pptx
+/archive_deduped.py
+/feedly_to_notion.py
+/feedly-inbox-to-media-*.md
+/nextdraft_summaries.md
+scripts/*.command
+/task-app/
