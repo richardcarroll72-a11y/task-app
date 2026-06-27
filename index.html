@@ -721,6 +721,26 @@
     }
     .move-btn:hover { border-color: #14b8a6; background: #ccfbf1; }
     .move-btn:active { opacity: 0.7; }
+    .notion-link {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      background: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 1px;
+      font-size: 0.75rem;
+      line-height: 1;
+      text-decoration: none;
+      color: #6b7280;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .notion-link:hover { border-color: #818cf8; background: #eef2ff; color: var(--primary); }
+    .notion-link:active { opacity: 0.7; }
 
     /* ── Destination picker (article modal) ── */
     .dest-picker {
@@ -1541,6 +1561,13 @@ function renderTasks() {
   });
 }
 
+// Small link to open the underlying Notion page (task, article, etc.) in a new tab for editing.
+function notionLink(t) {
+  return (t && t.url)
+    ? `<a class="notion-link" href="${escHtml(t.url)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" title="Open in Notion to edit" aria-label="Open in Notion">✎</a>`
+    : '';
+}
+
 function taskCard(task, isLater = false, isOverdue = false) {
   const dateLabel = formatDate(task.dueDate);
   const bucket = getTaskBucket(task.dueDate);
@@ -1590,6 +1617,7 @@ function taskCard(task, isLater = false, isOverdue = false) {
       <div class="card-right">
         <button class="park-btn" data-id="${task.id}" data-name="${escHtml(task.name)}" data-url="${escHtml(task.url || '')}" data-notes="${escHtml(task.notes || '')}" data-priority="${escHtml(task.priority || '')}" data-project="[]" data-due-date="${escHtml(task.dueDate || '')}" data-article-url="${escHtml(task.articleUrl || '')}" title="Park as Future Project" aria-label="Park '${task.name}' as Future Project">🚀</button>
         <button class="move-btn" data-id="${task.id}" data-name="${escHtml(task.name)}" data-notes="${escHtml(task.notes || '')}" title="Move to…" aria-label="Move '${task.name}' to another list">↪</button>
+        ${notionLink(task)}
         ${spireBadge}
       </div>
     </div>`;
@@ -1621,6 +1649,7 @@ function articleCard(task) {
       </div>
       <div class="card-right">
         <button class="move-article-btn" data-id="${task.id}" data-name="${escHtml(title)}" data-url="${escHtml(task.articleUrl || '')}" title="Move to another list" aria-label="Move '${escHtml(title)}' to another list">↗</button>
+        ${notionLink(task)}
         ${spireBadge}
       </div>
     </div>`;
@@ -1642,6 +1671,7 @@ function relationshipCard(task) {
         ${notesHtml}
       </div>
       <div class="card-right">
+        ${notionLink(task)}
         ${spireBadge}
       </div>
     </div>`;
@@ -1748,6 +1778,7 @@ function parentTaskCard(task, isOverdue = false) {
           </div>
         </div>
         <div class="card-right">
+          ${notionLink(task)}
           ${spireBadge}
           <span class="subtask-chevron" id="chevron-${task.id}">▾</span>
         </div>
@@ -1763,6 +1794,7 @@ function subtaskCard(subtask, parentId) {
     <div class="subtask-card" id="subtask-${subtask.id}">
       <button class="check-btn subtask-check" onclick="completeSubtask('${subtask.id}', '${parentId}')">✓</button>
       <span class="subtask-name">${escHtml(subtask.name)}</span>
+      ${notionLink(subtask)}
     </div>`;
 }
 
