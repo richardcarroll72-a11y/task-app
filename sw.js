@@ -1,7 +1,7 @@
 // Service Worker for My Tasks PWA
-const CACHE_NAME = 'my-tasks-v5';
+const CACHE_NAME = 'my-tasks-v6';
 const STATIC_ASSETS = ['/', '/index.html', '/manifest.json'];
-const API_CACHE = 'my-tasks-api-v5';
+const API_CACHE = 'my-tasks-api-v6';
 
 // Install: cache static assets
 self.addEventListener('install', event => {
@@ -30,9 +30,24 @@ self.addEventListener('fetch', event => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // API requests: network first, fall back to cache
   if (url.pathname.startsWith('/api/')) {
     if (request.method === 'GET') {
+      // The live task list and stats must NEVER be served from a stale cache —
+      // doing so makes completed tasks reappear and new tasks not show up.
+      // Always go to the network; on a genuine failure return an explicit
+      // offline placeholder (which surfaces the offline banner) rather than old data.
+      if (url.pathname === '/api/tasks' || url.pathname === '/api/stats') {
+        event.respondWith(
+          fetch(request).catch(() =>
+            new Response(
+              JSON.stringify({ tasks: [], stats: { today: 0, overdue: 0, total: 0 }, offline: true }),
+              { headers: { 'Content-Type': 'application/json' } }
+            )
+          )
+        );
+        return;
+      }
+      // Other API GETs (projects, etc.): network-first, fall back to cache.
       event.respondWith(
         fetch(request)
           .then(response => {
@@ -42,16 +57,7 @@ self.addEventListener('fetch', event => {
             }
             return response;
           })
-          .catch(() =>
-            caches.match(request).then(
-              cached =>
-                cached ||
-                new Response(
-                  JSON.stringify({ tasks: [], stats: { today: 0, overdue: 0, total: 0 }, offline: true }),
-                  { headers: { 'Content-Type': 'application/json' } }
-                )
-            )
-          )
+          .catch(() => caches.match(request).then(cached => cached || Response.error()))
       );
     }
     // Non-GET API calls: always go to network (don't intercept)
